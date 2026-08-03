@@ -71,11 +71,23 @@
   <div id="fixSteps" class="fix-steps hidden">
     <b>If camera access keeps failing on this file:</b>
     <ol>
-      <li>Chrome menu (⋮) → Settings → Site settings → Camera → make sure
-          nothing related to local files is set to "Blocked"</li>
-      <li>Phone Settings → Apps → Chrome → Permissions → Camera → set to
-          "Allow"</li>
-      <li>If it's still blocked after both of those, some Android Chrome
+      <li>Getting "Permission denied" with <em>no</em> system prompt at all
+          almost always means this page's camera permission was already
+          blocked from an earlier attempt (denying it once blocks it for
+          good until you undo it). Fix: Chrome menu (⋮) → Settings → Site
+          settings → Camera → find this file's entry (it may be listed
+          under a "file://" or blank-looking origin) and set it back to
+          "Ask" or "Allow".</li>
+      <li>Also confirm the Chrome app itself has camera access at the OS
+          level: Phone Settings → Apps → Chrome → Permissions → Camera →
+          "Allow".</li>
+      <li>If you're opening this file from inside another app (a chat app's
+          built-in file preview, a downloads-manager "preview" pane, etc.)
+          instead of a full Chrome tab, camera access can be blocked with
+          no prompt at all and no way to fix it from that view. Save the
+          file, then open it explicitly in Chrome (or Firefox/Samsung
+          Internet) to get a real permission prompt.</li>
+      <li>If it's still blocked after all of the above, some Android Chrome
           builds simply refuse camera access on file:// pages with no
           visible toggle to fix it. In that case use the server-hosted
           version instead: https://&lt;server-ip&gt;:5000/camera-test
@@ -10321,7 +10333,21 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
         rafId = requestAnimationFrame(scanFrame);
       })
       .catch(function (err) {
-        setStatus("Camera access failed: " + (err && err.message ? err.message : err), "err");
+        var name = err && err.name ? err.name : "";
+        var message = err && err.message ? err.message : String(err);
+        if (name === "NotAllowedError") {
+          setStatus(
+            "Camera blocked for this page (" + message + "). If no permission prompt appeared, " +
+              "this origin was already denied before -- see step 1 below to unblock it.",
+            "err"
+          );
+        } else if (name === "NotFoundError" || name === "OverconstrainedError") {
+          setStatus("No usable camera was found on this device (" + name + ").", "err");
+        } else if (name === "NotReadableError") {
+          setStatus("The camera is already in use by another app (" + name + ").", "err");
+        } else {
+          setStatus("Camera access failed: " + name + (message ? " -- " + message : ""), "err");
+        }
         showFixSteps(true);
       });
   }
