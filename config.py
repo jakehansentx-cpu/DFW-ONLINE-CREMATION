@@ -122,10 +122,17 @@ COOLERS = [
         "screen": "Cremation Staging",
         # Transitional holding area for decedents remaining in-house for
         # cremation, moved here (via Move, same as any other location)
-        # once they leave a cooler shelf/slot. Shared like the baby
-        # shelf -- more than one can be staged at once under one QR code.
-        "shared": True,
-        "shelves": [(1, [None])],
+        # once they leave a cooler shelf/slot. 12 individual shelves,
+        # one decedent each -- no A/B letter.
+        "shelves": [(i, [None]) for i in range(1, 13)],
+    },
+    {
+        # Biers, same pattern as the ATC Cots/Biers overflow areas --
+        # separate from the 12 numbered shelves above.
+        "name": "Cremation Staging Biers",
+        "code": "CREM-STAGE-BIERS",
+        "screen": "Cremation Staging",
+        "shelves": [(i, [None]) for i in range(1, 6)],
     },
 ]
 
