@@ -708,16 +708,11 @@ def api_sheet_intake_save():
                 _sheets().backfill_intake(
                     sheet_row, format_date_for_sheet(pickup_date), name, funeral_home
                 )
-                # QR column: only generate/upload once per case -- once a
-                # row has a QR image, re-saving edited info shouldn't spam
-                # Drive with a new upload every time.
-                if not _sheets().row_has_qr(sheet_row):
+                if not _sheets().row_has_case_link(sheet_row):
                     target_url = request.host_url.rstrip("/") + url_for(
                         "case_detail_page", case_code=case_code
                     )
-                    png_bytes = generate_qr_png(target_url)
-                    drive_url = _sheets().upload_qr_to_drive(case_code, png_bytes)
-                    _sheets().backfill_qr(sheet_row, drive_url)
+                    _sheets().backfill_case_link(sheet_row, target_url)
         except Exception as e:
             # Local save already succeeded -- don't fail the whole request
             # over a sheet write hiccup, just tell the caller it happened.

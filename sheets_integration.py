@@ -7,7 +7,14 @@ Column layout (matches your sheet):
     D = decedent name
     E = funeral home
     L = cooler location + shelf/slot (written back after Assign/Move)
-    M = QR code image (uploaded to Drive, shown inline via =IMAGE())
+    M = link to the case's page (has a working QR on it, and a Print
+        Tag link) -- NOT a picture in the cell. Google Drive service
+        accounts have no storage quota of their own and there's no
+        practical way around that on a free (non-Workspace) Google
+        account, so the cell holds a clickable link instead. The
+        armband tag itself still has a real, scannable QR code either
+        way -- this column is just a convenience shortcut from the
+        sheet.
     N = released to -- who/where the decedent was released to
 
 "Next available case number" = the first row, scanning top to bottom,
@@ -15,33 +22,18 @@ where column A has a value but B, D, and E are all still empty. That's
 what makes a row "reserved but unclaimed" rather than a completed
 historical case.
 """
-import io
-
 import config
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
 
-# drive.file: the service account can only see/manage files IT creates,
-# not your whole Drive -- the minimum scope needed to upload QR images.
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive.file",
-]
-
-
-def _get_credentials():
-    return service_account.Credentials.from_service_account_file(
-        config.GOOGLE_SERVICE_ACCOUNT_FILE, scopes=SCOPES
-    )
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 
 def _get_service():
-    return build("sheets", "v4", credentials=_get_credentials())
-
-
-def _get_drive_service():
-    return build("drive", "v3", credentials=_get_credentials())
+    creds = service_account.Credentials.from_service_account_file(
+        config.GOOGLE_SERVICE_ACCOUNT_FILE, scopes=SCOPES
+    )
+    return build("sheets", "v4", credentials=creds)
 
 
 def _sheet_range(a1_range):
@@ -123,9 +115,9 @@ def find_row_for_case(case_number):
     return None
 
 
-def row_has_qr(row_num):
+def row_has_case_link(row_num):
     """True if column M already has anything in it for this row -- lets
-    the caller skip re-uploading a QR image to Drive on every re-save."""
+    the caller skip re-writing it on every re-save."""
     service = _get_service()
     result = (
         service.spreadsheets()
@@ -137,46 +129,15 @@ def row_has_qr(row_num):
     return bool(values and values[0] and str(values[0][0]).strip())
 
 
-def upload_qr_to_drive(case_code, png_bytes):
-    """
-    Uploads a case's QR image to Drive (via the service account) and
-    makes it link-viewable, so Google Sheets' own =IMAGE() renderer --
-    which fetches from Google's servers, not the funeral home's LAN --
-    can actually load it. The image only encodes a URL to a
-    passcode-gated case page; it doesn't show the decedent's name or
-    other details by itself. Returns a direct-view URL for that file.
-    """
-    drive = _get_drive_service()
-    media = MediaIoBaseUpload(io.BytesIO(png_bytes), mimetype="image/png", resumable=False)
-    file = (
-        drive.files()
-        .create(
-            body={
-                "name": f"case-qr-{case_code}.png",
-                "parents": [config.GOOGLE_DRIVE_QR_FOLDER_ID],
-            },
-            media_body=media,
-            fields="id",
-        )
-        .execute()
-    )
-    file_id = file["id"]
-    drive.permissions().create(
-        fileId=file_id, body={"role": "reader", "type": "anyone"}
-    ).execute()
-    return f"https://drive.google.com/uc?export=view&id={file_id}"
-
-
-def backfill_qr(row_num, drive_url):
-    """Writes an =IMAGE() formula into column M so the QR shows up
-    directly in the cell, not just as a link."""
+def backfill_case_link(row_num, case_url):
+    """Writes a clickable link to the case's page (QR + info) into
+    column M."""
     service = _get_service()
-    formula = f'=IMAGE("{drive_url}")'
     service.spreadsheets().values().update(
         spreadsheetId=config.GOOGLE_SHEET_ID,
         range=_sheet_range(f"M{row_num}"),
         valueInputOption="USER_ENTERED",
-        body={"values": [[formula]]},
+        body={"values": [[case_url]]},
     ).execute()
 
 
