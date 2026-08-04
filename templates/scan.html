@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cooler Scan</title>
+<link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+<link rel="icon" href="{{ url_for('static', filename='icon-192.png') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-192.png') }}">
+<meta name="theme-color" content="#101418">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="scan-body">
+  <header class="scan-header">
+    <h1>Cooler Scan Station</h1>
+    <div style="text-align:center;"><a href="/logout" style="color:#889; font-size:13px;">Log out</a></div>
+  </header>
+
+  <div class="mode-bar">
+    <button class="mode-btn active" data-mode="sheet-intake">New Case (Sheet)</button>
+    <button class="mode-btn" data-mode="intake">Field Intake (Tag)</button>
+    <button class="mode-btn" data-mode="assign">Assign (at cooler)</button>
+    <button class="mode-btn" data-mode="move">Move</button>
+    <button class="mode-btn" data-mode="release">Release / Pickup</button>
+  </div>
+
+  <div id="pendingBadge" class="pending-badge hidden"></div>
+
+  <div class="scan-panel">
+    <div id="stepLabel" class="step-label">Scan the Case ID tag</div>
+    <button id="startSheetCaseBtn" class="primary-btn hidden">Start New Case</button>
+    <input id="scanInput" class="scan-input" type="text" autofocus
+           placeholder="Tap here, then scan..." autocomplete="off">
+    <button id="cameraBtn" class="camera-btn">📷 Use Phone/Tablet Camera Instead</button>
+    <div id="cameraPanel" class="camera-panel hidden">
+      <video id="cameraVideo" playsinline muted autoplay></video>
+      <canvas id="cameraCanvas" class="hidden"></canvas>
+      <button id="cameraStopBtn" class="secondary-btn">Stop Camera</button>
+    </div>
+    <div id="statusMsg" class="status-msg"></div>
+  </div>
+
+  <div id="infoForm" class="info-form hidden">
+    <h3 id="infoFormTitle">Case Details</h3>
+    <label>Name</label>
+    <input id="fName" type="text">
+    <label>Funeral Home</label>
+    <input id="fHome" type="text">
+    <label>Pickup Date</label>
+    <input id="fDate" type="date">
+    <button id="saveInfoBtn" class="primary-btn">Save</button>
+  </div>
+
+  <div class="reset-row">
+    <button id="resetBtn" class="secondary-btn">Reset</button>
+  </div>
+
+  <script src="{{ url_for('static', filename='jsQR.js') }}"></script>
+  <script src="{{ url_for('static', filename='scan.js') }}"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js");
+      });
+    }
+  </script>
+</body>
+</html>

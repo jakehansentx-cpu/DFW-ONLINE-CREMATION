@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Camera Scan Test</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<style>
+  .test-body { max-width: 520px; margin: 0 auto; padding: 16px; }
+  #testVideo { width: 100%; border-radius: 8px; border: 2px solid #2a5d8a; background: #000; }
+  .log-list { list-style: none; padding: 0; margin: 14px 0 0; }
+  .log-item {
+    background: #1a1f26; border: 1px solid #333; border-radius: 6px;
+    padding: 10px 14px; margin-bottom: 8px; font-family: Consolas, Menlo, monospace;
+  }
+  .log-item .code-text { color: #7fd99a; font-weight: bold; word-break: break-all; }
+  .log-item .code-time { color: #889; font-size: 12px; margin-top: 4px; }
+  .note-box {
+    background: rgba(79,156,240,.1); border: 1px solid rgba(79,156,240,.3);
+    border-radius: 8px; padding: 12px 14px; font-size: 13.5px; color: #a9c8f0; margin-bottom: 16px;
+  }
+  .diag-box {
+    background: #1a1f26; border: 1px solid #333; border-radius: 8px;
+    padding: 12px 14px; font-size: 13px; margin-bottom: 16px; font-family: Consolas, Menlo, monospace;
+  }
+  .diag-box div { margin-bottom: 4px; }
+  .diag-ok { color: #7fd99a; }
+  .diag-warn { color: #f0b74f; }
+  .diag-err { color: #ff9d9d; }
+  .fix-steps {
+    background: rgba(240,183,79,.08); border: 1px solid rgba(240,183,79,.3);
+    border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #f0b74f; margin-top: 10px;
+  }
+  .fix-steps.hidden { display: none; }
+  .fix-steps ol { margin: 6px 0 0; padding-left: 20px; }
+  .fix-steps li { margin-bottom: 6px; }
+</style>
+</head>
+<body class="scan-body">
+<div class="test-body">
+  <header class="scan-header">
+    <h1>Camera Scan Test</h1>
+  </header>
+
+  <div class="note-box">
+    This page only tests the camera + QR decoding. Nothing scanned here is
+    sent anywhere — no server calls, no login required, no data saved.
+    Safe to point at any QR code just to confirm scanning works.
+  </div>
+
+  <div id="diagBox" class="diag-box"></div>
+
+  <button id="startBtn" class="primary-btn">Start Camera</button>
+  <video id="testVideo" playsinline muted autoplay class="hidden"></video>
+  <canvas id="testCanvas" class="hidden"></canvas>
+  <button id="stopBtn" class="secondary-btn hidden" style="margin-top:10px;">Stop Camera</button>
+
+  <div id="statusMsg" class="status-msg"></div>
+  <div id="fixSteps" class="fix-steps hidden">
+    <b>If camera access keeps failing:</b>
+    <ol>
+      <li>Chrome menu (⋮) → Settings → Site settings → Camera → make sure this site isn't set to "Blocked"</li>
+      <li>Phone Settings → Apps → Chrome → Permissions → Camera → set to "Allow"</li>
+    </ol>
+  </div>
+
+  <h3 style="margin-top:20px;">Detected codes (most recent first)</h3>
+  <ul id="logList" class="log-list"></ul>
+</div>
+
+<script src="{{ url_for('static', filename='jsQR.js') }}"></script>
+<script>
+  const startBtn = document.getElementById("startBtn");
+  const stopBtn = document.getElementById("stopBtn");
+  const video = document.getElementById("testVideo");
+  const canvas = document.getElementById("testCanvas");
+  const statusMsg = document.getElementById("statusMsg");
+  const logList = document.getElementById("logList");
+  const diagBox = document.getElementById("diagBox");
+  const fixSteps = document.getElementById("fixSteps");
+
+  let stream = null;
+  let loopId = null;
+  let cooldown = false;
+
+  function showStatus(text, ok) {
+    statusMsg.textContent = text;
+    statusMsg.className = "status-msg " + (ok ? "ok" : "err");
+    fixSteps.classList.toggle("hidden", ok);
+  }
+
+  function diagLine(cls, text) {
+    const div = document.createElement("div");
+    div.className = cls;
+    div.textContent = text;
+    diagBox.appendChild(div);
+  }
+
+  async function runDiagnostics() {
+    diagBox.innerHTML = "";
+    diagLine(window.isSecureContext ? "diag-ok" : "diag-err", "Secure context: " + window.isSecureContext);
+    diagLine(
+      navigator.mediaDevices && navigator.mediaDevices.getUserMedia ? "diag-ok" : "diag-err",
+      "Camera API available: " + !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
+    );
+    if (navigator.permissions && navigator.permissions.query) {
+      try {
+        const status = await navigator.permissions.query({ name: "camera" });
+        const cls = status.state === "granted" ? "diag-ok" : status.state === "denied" ? "diag-err" : "diag-warn";
+        diagLine(cls, "Camera permission state: " + status.state);
+      } catch (e) {
+        diagLine("diag-warn", "Camera permission state: unknown (query unsupported here)");
+      }
+    } else {
+      diagLine("diag-warn", "Permissions API not available to pre-check.");
+    }
+  }
+  runDiagnostics();
+
+  async function start() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showStatus(
+        "Camera not available. This almost always means the page isn't loaded over HTTPS (or localhost), or camera permission was denied.",
+        false
+      );
+      return;
+    }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+    } catch (err) {
+      showStatus("Camera permission denied or unavailable: " + err.message, false);
+      return;
+    }
+    video.srcObject = stream;
+    video.muted = true;
+    await video.play();
+    video.classList.remove("hidden");
+    stopBtn.classList.remove("hidden");
+    startBtn.classList.add("hidden");
+    showStatus("Camera running. Point it at a QR code.", true);
+    loop();
+  }
+
+  function stop() {
+    if (loopId) cancelAnimationFrame(loopId);
+    if (stream) {
+      stream.getTracks().forEach((t) => t.stop());
+      stream = null;
+    }
+    video.classList.add("hidden");
+    stopBtn.classList.add("hidden");
+    startBtn.classList.remove("hidden");
+    showStatus("Camera stopped.", true);
+  }
+
+  function loop() {
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const result = jsQR(imageData.data, imageData.width, imageData.height);
+      if (result && result.data && !cooldown) {
+        cooldown = true;
+        logDetection(result.data.trim());
+        setTimeout(() => { cooldown = false; }, 1200);
+      }
+    }
+    loopId = requestAnimationFrame(loop);
+  }
+
+  function logDetection(text) {
+    const li = document.createElement("li");
+    li.className = "log-item";
+    li.innerHTML =
+      `<div class="code-text">${text}</div>` +
+      `<div class="code-time">${new Date().toLocaleTimeString()}</div>`;
+    logList.prepend(li);
+  }
+
+  startBtn.addEventListener("click", start);
+  stopBtn.addEventListener("click", stop);
+</script>
+</body>
+</html>

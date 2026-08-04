@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cooler Board — Login</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="scan-body">
+  <header class="scan-header">
+    <h1>Cooler Board</h1>
+  </header>
+  <div class="scan-panel">
+    <form method="POST">
+      <div class="step-label">Enter the access passcode</div>
+      <input type="password" name="passcode" class="scan-input" autofocus autocomplete="current-password">
+      {% if error %}<div class="status-msg err">{{ error }}</div>{% endif %}
+      <button type="submit" class="primary-btn" style="margin-top:14px;">Continue</button>
+    </form>
+  </div>
+</body>
+</html>

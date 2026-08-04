@@ -1,0 +1,153 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #101418;
+  color: #f2f2f2;
+}
+
+/* ---------------- Board (TV) ---------------- */
+.board-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 28px;
+  background: #1a1f26;
+  border-bottom: 2px solid #333;
+}
+.board-header h1 { margin: 0; font-size: 28px; letter-spacing: 1px; }
+#clock { font-size: 22px; color: #aab; }
+
+.grid {
+  padding: 16px;
+}
+.cooler-section {
+  margin-bottom: 28px;
+}
+.cooler-title {
+  font-size: 20px;
+  font-weight: bold;
+  color: #dfe3ea;
+  border-bottom: 2px solid #2a5d8a;
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+}
+.shelf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+.shelf-card {
+  background: #1a1f26;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 6px;
+}
+.shelf-title {
+  font-size: 13px;
+  text-align: center;
+  color: #9aa;
+  margin-bottom: 4px;
+  font-weight: bold;
+}
+.slot-mini-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.slot-mini-grid.single {
+  grid-template-columns: 1fr;
+}
+.slot-cell {
+  border-radius: 4px;
+  padding: 6px 2px;
+  text-align: center;
+  font-size: 11px;
+  cursor: pointer;
+  min-height: 34px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.slot-empty { background: #1f3d2b; color: #7fd99a; }
+.slot-occupied { background: #4a1d1d; color: #ff9d9d; }
+.slot-cell .code { font-weight: bold; }
+.slot-cell .name { font-size: 10px; opacity: 0.85; }
+
+.detail-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center;
+}
+.detail-overlay.hidden { display: none; }
+.detail-card {
+  background: #1a1f26;
+  border: 2px solid #444;
+  border-radius: 10px;
+  padding: 24px 32px;
+  min-width: 320px;
+  position: relative;
+  font-size: 18px;
+  line-height: 1.6;
+}
+.close-btn {
+  position: absolute; top: 8px; right: 12px;
+  background: none; border: none; color: #f2f2f2; font-size: 24px; cursor: pointer;
+}
+
+/* ---------------- Scan (tablet) ---------------- */
+.scan-body { padding: 16px; max-width: 520px; margin: 0 auto; }
+.scan-header h1 { font-size: 22px; text-align: center; }
+
+.mode-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.mode-btn {
+  flex: 1 1 30%; padding: 12px 4px; font-size: 13.5px;
+  background: #1a1f26; color: #ccc; border: 1px solid #333; border-radius: 8px;
+}
+.mode-btn.active { background: #2a5d8a; color: #fff; border-color: #2a5d8a; }
+
+.scan-panel { background: #1a1f26; border-radius: 10px; padding: 20px; text-align: center; }
+.step-label { font-size: 18px; margin-bottom: 12px; color: #aab; }
+.scan-input {
+  width: 100%; font-size: 22px; padding: 16px; text-align: center;
+  border-radius: 8px; border: 2px solid #2a5d8a; background: #0d1116; color: #fff;
+}
+.status-msg { margin-top: 14px; font-size: 16px; min-height: 24px; }
+.status-msg.ok { color: #7fd99a; }
+.status-msg.err { color: #ff9d9d; }
+
+.camera-btn {
+  width: 100%; margin-top: 12px; padding: 12px; font-size: 15px;
+  background: #263447; color: #cdd; border: 1px solid #345; border-radius: 8px;
+}
+.camera-panel { margin-top: 14px; }
+.camera-panel.hidden { display: none; }
+.camera-panel video {
+  width: 100%; border-radius: 8px; border: 2px solid #2a5d8a; background: #000;
+}
+.camera-panel .secondary-btn { margin-top: 10px; }
+
+.pending-badge {
+  background: rgba(240,183,79,.12); border: 1px solid rgba(240,183,79,.35);
+  color: #f0b74f; border-radius: 8px; padding: 10px 14px; font-size: 14px;
+  margin-bottom: 14px; text-align: center;
+}
+.pending-badge.hidden { display: none; }
+.pending-badge.synced { background: rgba(95,216,138,.12); border-color: rgba(95,216,138,.35); color: #5fd88a; }
+
+.info-form { background: #1a1f26; border-radius: 10px; padding: 20px; margin-top: 16px; }
+.info-form.hidden { display: none; }
+.info-form label { display: block; margin-top: 10px; font-size: 14px; color: #aab; }
+.info-form input {
+  width: 100%; font-size: 18px; padding: 10px; margin-top: 4px;
+  border-radius: 6px; border: 1px solid #333; background: #0d1116; color: #fff;
+}
+.primary-btn {
+  margin-top: 16px; width: 100%; padding: 14px; font-size: 17px;
+  background: #2a5d8a; color: #fff; border: none; border-radius: 8px;
+}
+.secondary-btn {
+  width: 100%; padding: 12px; font-size: 15px;
+  background: #333; color: #ccc; border: none; border-radius: 8px;
+}
+.reset-row { margin-top: 20px; }

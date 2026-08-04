@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Cooler Board</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="board-body">
+  <header class="board-header">
+    <h1>Cooler Status</h1>
+    <div style="display:flex; align-items:center; gap:18px;">
+      <div id="clock"></div>
+      <a href="/logout" style="color:#889; font-size:13px;">Log out</a>
+    </div>
+  </header>
+  <div id="grid" class="grid"></div>
+
+  <div id="detail" class="detail-overlay hidden">
+    <div class="detail-card">
+      <button id="closeDetail" class="close-btn">&times;</button>
+      <div id="detailContent"></div>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='board.js') }}"></script>
+</body>
+</html>
