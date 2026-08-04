@@ -441,7 +441,7 @@ def api_board():
     rows = db.execute(
         """
         SELECT l.code AS location_code, l.cooler_name, l.cooler_code, l.shelf, l.slot, l.shared,
-               l.screen, c.case_code, c.name, c.funeral_home, c.pickup_date, c.status
+               l.screen, c.case_code, c.name, c.funeral_home, c.pickup_date, c.status, c.created_at
         FROM locations l
         LEFT JOIN cases c ON c.location_id = l.id AND c.status = 'placed'
         ORDER BY l.cooler_code, l.shelf, l.slot

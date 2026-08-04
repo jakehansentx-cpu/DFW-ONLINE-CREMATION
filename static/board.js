@@ -10,6 +10,15 @@ function escapeHtml(s) {
   }[c]));
 }
 
+// created_at is a full "YYYY-MM-DD HH:MM:SS" timestamp -- just the date,
+// formatted like the rest of the app (e.g. "8/4/26"), is what's useful here.
+function formatDate(datetimeStr) {
+  if (!datetimeStr) return "";
+  const [y, m, d] = datetimeStr.split(" ")[0].split("-").map(Number);
+  if (!y || !m || !d) return datetimeStr;
+  return `${m}/${d}/${String(y).slice(2)}`;
+}
+
 let latestRows = [];
 let currentScreen = null;
 
@@ -55,6 +64,7 @@ function renderBoard(rows) {
         name: r.name,
         funeral_home: r.funeral_home,
         pickup_date: r.pickup_date,
+        created_at: r.created_at,
       });
     }
     shelves[r.shelf][r.location_code] = loc;
@@ -102,9 +112,15 @@ function renderBoard(rows) {
           if (n === 0) {
             bodyHtml = `<div class="name">empty</div>`;
           } else if (n === 1) {
-            bodyHtml = `<div class="name">${escapeHtml(loc.occupants[0].name || loc.occupants[0].case_code)}</div>`;
+            const o = loc.occupants[0];
+            bodyHtml =
+              `<div class="name">${escapeHtml(o.name || o.case_code)}</div>` +
+              `<div class="home">${escapeHtml(o.funeral_home || "")}</div>` +
+              `<div class="date">${escapeHtml(formatDate(o.created_at))}</div>`;
           } else {
-            bodyHtml = `<div class="name">${n} occupants</div>`;
+            bodyHtml =
+              `<div class="name">${n} occupants</div>` +
+              `<div class="home">tap for details</div>`;
           }
           cell.innerHTML = (label ? `<div class="code">${escapeHtml(label)}</div>` : "") + bodyHtml;
           cell.addEventListener("click", () => showDetail(loc, cooler.name, shelfNum));
