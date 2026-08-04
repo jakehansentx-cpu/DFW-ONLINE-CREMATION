@@ -1,4 +1,6 @@
 service_account.json
+cert.pem
+key.pem
 __pycache__/
 *.pyc
 .venv/

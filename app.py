@@ -605,12 +605,68 @@ def api_case_get(case_code):
     return jsonify(dict(row))
 
 
+def _ensure_https_cert():
+    """
+    Self-signed cert for LAN HTTPS, generated once and cached in
+    cert.pem/key.pem (same idea as secret_key.txt) instead of asking
+    Werkzeug to generate a fresh one via ssl_context="adhoc" on every
+    startup. That "adhoc" path hands key generation off to pyOpenSSL's
+    own OpenSSL binding, which has a known history of hanging or being
+    extremely slow on some Windows machines (entropy/FIPS-mode
+    weirdness). Generating directly with the `cryptography` library
+    (already installed -- pyOpenSSL depends on it) sidesteps that path
+    entirely, and caching to disk means it only ever runs once.
+    """
+    cert_path = Path("cert.pem")
+    key_path = Path("key.pem")
+    if cert_path.exists() and key_path.exists():
+        return str(cert_path), str(key_path)
+
+    import datetime
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+
+    print("Generating a self-signed HTTPS certificate (one-time, cached in cert.pem/key.pem)...")
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "cooler-board.local")])
+    now = datetime.datetime.now(datetime.timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - datetime.timedelta(days=1))
+        .not_valid_after(now + datetime.timedelta(days=3650))
+        .add_extension(
+            x509.SubjectAlternativeName(
+                [x509.DNSName("cooler-board.local"), x509.DNSName("localhost")]
+            ),
+            critical=False,
+        )
+        .sign(key, hashes.SHA256())
+    )
+    key_path.write_bytes(
+        key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    )
+    cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    print("Certificate saved -- future --https starts will reuse it instantly.")
+    return str(cert_path), str(key_path)
+
+
 if __name__ == "__main__":
     import sys
 
     init_db()
     use_https = "--https" in sys.argv
-    ssl_ctx = "adhoc" if use_https else None
+    ssl_ctx = _ensure_https_cert() if use_https else None
     if use_https:
         print("Starting with a self-signed HTTPS cert (needed for camera scanning).")
         print("Browsers will show a 'not secure' warning the first time -- that's")
