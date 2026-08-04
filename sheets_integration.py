@@ -6,25 +6,42 @@ Column layout (matches your sheet):
     B = date
     D = decedent name
     E = funeral home
-    L = cooler location + shelf/slot (written back after Assign)
+    L = cooler location + shelf/slot (written back after Assign/Move)
+    M = QR code image (uploaded to Drive, shown inline via =IMAGE())
+    N = released to -- who/where the decedent was released to
 
 "Next available case number" = the first row, scanning top to bottom,
 where column A has a value but B, D, and E are all still empty. That's
 what makes a row "reserved but unclaimed" rather than a completed
 historical case.
 """
+import io
+
 import config
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
 
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+# drive.file: the service account can only see/manage files IT creates,
+# not your whole Drive -- the minimum scope needed to upload QR images.
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive.file",
+]
+
+
+def _get_credentials():
+    return service_account.Credentials.from_service_account_file(
+        config.GOOGLE_SERVICE_ACCOUNT_FILE, scopes=SCOPES
+    )
 
 
 def _get_service():
-    creds = service_account.Credentials.from_service_account_file(
-        config.GOOGLE_SERVICE_ACCOUNT_FILE, scopes=SCOPES
-    )
-    return build("sheets", "v4", credentials=creds)
+    return build("sheets", "v4", credentials=_get_credentials())
+
+
+def _get_drive_service():
+    return build("drive", "v3", credentials=_get_credentials())
 
 
 def _sheet_range(a1_range):
@@ -104,3 +121,68 @@ def find_row_for_case(case_number):
         if row and row[0].strip() == case_number.strip():
             return i + 1
     return None
+
+
+def row_has_qr(row_num):
+    """True if column M already has anything in it for this row -- lets
+    the caller skip re-uploading a QR image to Drive on every re-save."""
+    service = _get_service()
+    result = (
+        service.spreadsheets()
+        .values()
+        .get(spreadsheetId=config.GOOGLE_SHEET_ID, range=_sheet_range(f"M{row_num}"))
+        .execute()
+    )
+    values = result.get("values", [])
+    return bool(values and values[0] and str(values[0][0]).strip())
+
+
+def upload_qr_to_drive(case_code, png_bytes):
+    """
+    Uploads a case's QR image to Drive (via the service account) and
+    makes it link-viewable, so Google Sheets' own =IMAGE() renderer --
+    which fetches from Google's servers, not the funeral home's LAN --
+    can actually load it. The image only encodes a URL to a
+    passcode-gated case page; it doesn't show the decedent's name or
+    other details by itself. Returns a direct-view URL for that file.
+    """
+    drive = _get_drive_service()
+    media = MediaIoBaseUpload(io.BytesIO(png_bytes), mimetype="image/png", resumable=False)
+    file = (
+        drive.files()
+        .create(
+            body={"name": f"case-qr-{case_code}.png"},
+            media_body=media,
+            fields="id",
+        )
+        .execute()
+    )
+    file_id = file["id"]
+    drive.permissions().create(
+        fileId=file_id, body={"role": "reader", "type": "anyone"}
+    ).execute()
+    return f"https://drive.google.com/uc?export=view&id={file_id}"
+
+
+def backfill_qr(row_num, drive_url):
+    """Writes an =IMAGE() formula into column M so the QR shows up
+    directly in the cell, not just as a link."""
+    service = _get_service()
+    formula = f'=IMAGE("{drive_url}")'
+    service.spreadsheets().values().update(
+        spreadsheetId=config.GOOGLE_SHEET_ID,
+        range=_sheet_range(f"M{row_num}"),
+        valueInputOption="USER_ENTERED",
+        body={"values": [[formula]]},
+    ).execute()
+
+
+def backfill_released_to(row_num, released_to):
+    """Writes who/where a decedent was released to into column N."""
+    service = _get_service()
+    service.spreadsheets().values().update(
+        spreadsheetId=config.GOOGLE_SHEET_ID,
+        range=_sheet_range(f"N{row_num}"),
+        valueInputOption="USER_ENTERED",
+        body={"values": [[released_to]]},
+    ).execute()

@@ -4,12 +4,36 @@ function updateClock() {
 setInterval(updateClock, 1000);
 updateClock();
 
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+let latestRows = [];
+let currentScreen = null;
+
+const boardTabs = document.getElementById("boardTabs");
+if (boardTabs) {
+  const firstTab = boardTabs.querySelector(".board-tab-btn");
+  if (firstTab) currentScreen = firstTab.dataset.screen;
+  boardTabs.querySelectorAll(".board-tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      currentScreen = btn.dataset.screen;
+      boardTabs.querySelectorAll(".board-tab-btn").forEach((b) => b.classList.toggle("active", b === btn));
+      renderBoard(latestRows);
+    });
+  });
+}
+
 function renderBoard(rows) {
   const grid = document.getElementById("grid");
   const byCooler = {};
   const coolerOrder = [];
 
-  rows.forEach((r) => {
+  const visibleRows = currentScreen ? rows.filter((r) => r.screen === currentScreen) : rows;
+
+  visibleRows.forEach((r) => {
     if (!byCooler[r.cooler_code]) {
       byCooler[r.cooler_code] = { name: r.cooler_name, shelves: {} };
       coolerOrder.push(r.cooler_code);
@@ -78,11 +102,11 @@ function renderBoard(rows) {
           if (n === 0) {
             bodyHtml = `<div class="name">empty</div>`;
           } else if (n === 1) {
-            bodyHtml = `<div class="name">${loc.occupants[0].name || loc.occupants[0].case_code}</div>`;
+            bodyHtml = `<div class="name">${escapeHtml(loc.occupants[0].name || loc.occupants[0].case_code)}</div>`;
           } else {
             bodyHtml = `<div class="name">${n} occupants</div>`;
           }
-          cell.innerHTML = (label ? `<div class="code">${label}</div>` : "") + bodyHtml;
+          cell.innerHTML = (label ? `<div class="code">${escapeHtml(label)}</div>` : "") + bodyHtml;
           cell.addEventListener("click", () => showDetail(loc, cooler.name, shelfNum));
           mini.appendChild(cell);
         });
@@ -102,20 +126,58 @@ function showDetail(loc, coolerName, shelfNum) {
   const where = `${coolerName} — Shelf ${shelfNum}${loc.slot ? loc.slot : ""}`;
 
   if (loc.occupants.length === 0) {
-    content.innerHTML = `<h2>${where}</h2><p>Empty</p>`;
+    content.innerHTML = `<h2>${escapeHtml(where)}</h2><p>Empty</p>`;
   } else {
-    const cards = loc.occupants
+    const blocks = loc.occupants
       .map(
-        (o) => `
-      <div style="border-top:1px solid #333; padding-top:10px; margin-top:10px;">
-        <p><b>Case:</b> ${o.case_code}</p>
-        <p><b>Name:</b> ${o.name || "—"}</p>
-        <p><b>Funeral Home:</b> ${o.funeral_home || "—"}</p>
-        <p><b>Pickup Date:</b> ${o.pickup_date || "—"}</p>
+        (o, i) => `
+      <div class="occupant-block">
+        <p><b>Case:</b> ${escapeHtml(o.case_code)}</p>
+        <label>Name</label>
+        <input type="text" class="edit-name" data-case="${escapeHtml(o.case_code)}" value="${escapeHtml(o.name || "")}">
+        <label>Funeral Home</label>
+        <input type="text" class="edit-home" data-case="${escapeHtml(o.case_code)}" value="${escapeHtml(o.funeral_home || "")}">
+        <label>Pickup Date</label>
+        <input type="date" class="edit-date" data-case="${escapeHtml(o.case_code)}" value="${escapeHtml(o.pickup_date || "")}">
+        <button class="save-occupant-btn" data-case="${escapeHtml(o.case_code)}" data-index="${i}">Save</button>
+        <div class="save-status" data-index="${i}"></div>
       </div>`
       )
       .join("");
-    content.innerHTML = `<h2>${where}${loc.occupants.length > 1 ? ` (${loc.occupants.length} occupants)` : ""}</h2>${cards}`;
+    content.innerHTML = `<h2>${escapeHtml(where)}${loc.occupants.length > 1 ? ` (${loc.occupants.length} occupants)` : ""}</h2>${blocks}`;
+
+    content.querySelectorAll(".save-occupant-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const caseCode = btn.dataset.case;
+        const idx = btn.dataset.index;
+        const statusEl = content.querySelector(`.save-status[data-index="${idx}"]`);
+        const body = {
+          name: content.querySelector(`.edit-name[data-case="${CSS.escape(caseCode)}"]`).value,
+          funeral_home: content.querySelector(`.edit-home[data-case="${CSS.escape(caseCode)}"]`).value,
+          pickup_date: content.querySelector(`.edit-date[data-case="${CSS.escape(caseCode)}"]`).value,
+        };
+        btn.disabled = true;
+        statusEl.textContent = "Saving...";
+        statusEl.className = "save-status";
+        try {
+          const res = await fetch(`/api/case/${encodeURIComponent(caseCode)}/info`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Save failed");
+          statusEl.textContent = data.sheet_warning ? `Saved (${data.sheet_warning})` : "Saved.";
+          statusEl.className = "save-status " + (data.sheet_warning ? "err" : "ok");
+          poll();
+        } catch (err) {
+          statusEl.textContent = err.message;
+          statusEl.className = "save-status err";
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
   }
   overlay.classList.remove("hidden");
 }
@@ -127,6 +189,7 @@ async function poll() {
   try {
     const res = await fetch("/api/board");
     const rows = await res.json();
+    latestRows = rows;
     renderBoard(rows);
   } catch (e) {
     console.error("board poll failed", e);

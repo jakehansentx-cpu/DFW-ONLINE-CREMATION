@@ -19,6 +19,21 @@ body {
 .board-header h1 { margin: 0; font-size: 28px; letter-spacing: 1px; }
 #clock { font-size: 22px; color: #aab; }
 
+.board-tabs {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 12px 16px 0;
+}
+.board-tab-btn {
+  padding: 10px 18px; font-size: 15px;
+  background: #1a1f26; color: #ccc; border: 1px solid #333; border-radius: 8px;
+}
+.board-tab-btn.active { background: #2a5d8a; color: #fff; border-color: #2a5d8a; }
+
+.export-btn {
+  padding: 10px 18px; font-size: 14px;
+  background: #263447; color: #cdd; border: 1px solid #345; border-radius: 8px;
+}
+
 .grid {
   padding: 16px;
 }
@@ -95,6 +110,21 @@ body {
   position: absolute; top: 8px; right: 12px;
   background: none; border: none; color: #f2f2f2; font-size: 24px; cursor: pointer;
 }
+.detail-card label { display: block; margin-top: 10px; font-size: 13px; color: #aab; }
+.detail-card input {
+  width: 100%; font-size: 16px; padding: 8px; margin-top: 4px;
+  border-radius: 6px; border: 1px solid #333; background: #0d1116; color: #fff;
+}
+.detail-card .occupant-block {
+  border-top: 1px solid #333; padding-top: 10px; margin-top: 10px;
+}
+.detail-card .save-occupant-btn {
+  margin-top: 10px; padding: 10px; font-size: 14px; width: 100%;
+  background: #2a5d8a; color: #fff; border: none; border-radius: 6px;
+}
+.detail-card .save-status { font-size: 13px; margin-top: 6px; min-height: 16px; }
+.detail-card .save-status.ok { color: #7fd99a; }
+.detail-card .save-status.err { color: #ff9d9d; }
 
 /* ---------------- Scan (tablet) ---------------- */
 .scan-body { padding: 16px; max-width: 520px; margin: 0 auto; }

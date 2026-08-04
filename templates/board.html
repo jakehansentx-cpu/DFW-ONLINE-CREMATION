@@ -9,10 +9,18 @@
   <header class="board-header">
     <h1>Cooler Status</h1>
     <div style="display:flex; align-items:center; gap:18px;">
+      <a class="export-btn" href="{{ url_for('api_board_export') }}" style="text-decoration:none;">Export CSV</a>
       <div id="clock"></div>
       <a href="/logout" style="color:#889; font-size:13px;">Log out</a>
     </div>
   </header>
+
+  <div id="boardTabs" class="board-tabs">
+    {% for screen in screens %}
+    <button class="board-tab-btn{% if loop.first %} active{% endif %}" data-screen="{{ screen }}">{{ screen }}</button>
+    {% endfor %}
+  </div>
+
   <div id="grid" class="grid"></div>
 
   <div id="detail" class="detail-overlay hidden">

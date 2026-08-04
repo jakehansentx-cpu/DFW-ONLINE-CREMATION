@@ -9,6 +9,10 @@ const saveInfoBtn = document.getElementById("saveInfoBtn");
 const pendingBadge = document.getElementById("pendingBadge");
 const startSheetCaseBtn = document.getElementById("startSheetCaseBtn");
 const printTagLink = document.getElementById("printTagLink");
+const releaseForm = document.getElementById("releaseForm");
+const releaseFormTitle = document.getElementById("releaseFormTitle");
+const releasedTo = document.getElementById("releasedTo");
+const confirmReleaseBtn = document.getElementById("confirmReleaseBtn");
 
 // Declared here (not down by the rest of the camera code) because
 // resetFlow() calls stopCamera() on every run, including the very first
@@ -41,6 +45,7 @@ function resetFlow() {
   currentCaseCode = null;
   currentSheetRow = null;
   infoForm.classList.add("hidden");
+  releaseForm.classList.add("hidden");
   printTagLink.classList.add("hidden");
   statusMsg.textContent = "";
   statusMsg.className = "status-msg";
@@ -159,9 +164,10 @@ async function handleCaseScan(rawCode) {
   }
 
   if (mode === "release") {
-    await postJSON("/api/release", { case_code: code });
-    showStatus(`${code} released.`, true);
-    setTimeout(resetFlow, 1200);
+    releaseFormTitle.textContent = `Release Case ${code}`;
+    releasedTo.value = "";
+    releaseForm.classList.remove("hidden");
+    showStatus(`${code} scanned. Enter who it's released to.`, true);
     return;
   }
 
@@ -257,6 +263,20 @@ saveInfoBtn.addEventListener("click", async () => {
     stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}`;
     showStatus("Saved. Scan a slot location.", true);
     scanInput.focus();
+  } catch (err) {
+    showStatus(err.message, false);
+  }
+});
+
+confirmReleaseBtn.addEventListener("click", async () => {
+  try {
+    const result = await postJSON("/api/release", {
+      case_code: currentCaseCode,
+      released_to: releasedTo.value,
+    });
+    const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
+    showStatus(`${currentCaseCode} released.${warning}`, !result.sheet_warning);
+    setTimeout(resetFlow, 1400);
   } catch (err) {
     showStatus(err.message, false);
   }

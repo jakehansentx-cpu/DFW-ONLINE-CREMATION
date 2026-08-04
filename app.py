@@ -11,6 +11,7 @@ laptop). Point the TV-side browser at /board and the tablet at /scan.
     #   TV / mirrored tablet browser -> http://<this-machine-ip>:5000/board
     #   Tablet input browser         -> http://<this-machine-ip>:5000/scan
 """
+import csv
 import io
 import sqlite3
 import secrets
@@ -90,8 +91,19 @@ def close_db(exception=None):
         db.close()
 
 
+def _ensure_column(db, table, column, coltype):
+    """Add a column to an existing table if it's not already there --
+    lets a live cooler.db with real placement history pick up new
+    fields (like the "screen" grouping or released_to) without ever
+    needing to be deleted and reseeded."""
+    existing = {row["name"] for row in db.execute(f"PRAGMA table_info({table})")}
+    if column not in existing:
+        db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
+
+
 def init_db():
     db = sqlite3.connect(DB_PATH)
+    db.row_factory = sqlite3.Row
     db.executescript(
         """
         CREATE TABLE IF NOT EXISTS locations (
@@ -101,7 +113,8 @@ def init_db():
             cooler_code TEXT NOT NULL,
             shelf INTEGER NOT NULL,
             slot TEXT,  -- NULL means this shelf has no A/B letter
-            shared INTEGER NOT NULL DEFAULT 0  -- 1 = allows multiple occupants
+            shared INTEGER NOT NULL DEFAULT 0,  -- 1 = allows multiple occupants
+            screen TEXT  -- which /board tab this location's cooler shows under
         );
 
         CREATE TABLE IF NOT EXISTS cases (
@@ -114,7 +127,8 @@ def init_db():
                 -- pending_info -> pending_location -> placed -> released
             location_id INTEGER REFERENCES locations(id),
             created_at TEXT NOT NULL,
-            released_at TEXT
+            released_at TEXT,
+            released_to TEXT  -- who/where a released decedent went
         );
 
         CREATE TABLE IF NOT EXISTS moves (
@@ -132,26 +146,43 @@ def init_db():
         );
         """
     )
-    # seed locations if empty
-    count = db.execute("SELECT COUNT(*) FROM locations").fetchone()[0]
-    if count == 0:
-        rows = []
-        for cooler in config.COOLERS:
-            shared = 1 if cooler.get("shared") else 0
-            for shelf_num, slots in cooler["shelves"]:
-                for slot in slots:
-                    if slot:
-                        code = f"LOC|{cooler['code']}|S{shelf_num:02d}|{slot}"
-                    else:
-                        code = f"LOC|{cooler['code']}|S{shelf_num:02d}"
-                    rows.append((code, cooler["name"], cooler["code"], shelf_num, slot, shared))
-        db.executemany(
-            """INSERT INTO locations (code, cooler_name, cooler_code, shelf, slot, shared)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            rows,
+    # Migrate DBs created before "screen" / "released_to" existed.
+    _ensure_column(db, "locations", "screen", "TEXT")
+    _ensure_column(db, "cases", "released_to", "TEXT")
+    db.commit()
+
+    # Ensure every location in config.py exists in the DB, WITHOUT ever
+    # touching rows that are already there -- a live system's placement
+    # history depends on those rows' ids staying put. This means adding a
+    # new cooler (like Cremation Staging) to config.py just adds the new
+    # rows in place on the next restart; nothing gets wiped or reseeded.
+    added = 0
+    for cooler in config.COOLERS:
+        shared = 1 if cooler.get("shared") else 0
+        screen = cooler.get("screen") or cooler["name"]
+        db.execute(
+            "UPDATE locations SET cooler_name = ?, shared = ?, screen = ? WHERE cooler_code = ?",
+            (cooler["name"], shared, screen, cooler["code"]),
         )
-        db.commit()
-        print(f"Seeded {len(rows)} locations across {len(config.COOLERS)} coolers.")
+        for shelf_num, slots in cooler["shelves"]:
+            for slot in slots:
+                code = (
+                    f"LOC|{cooler['code']}|S{shelf_num:02d}|{slot}"
+                    if slot
+                    else f"LOC|{cooler['code']}|S{shelf_num:02d}"
+                )
+                exists = db.execute("SELECT 1 FROM locations WHERE code = ?", (code,)).fetchone()
+                if exists is None:
+                    db.execute(
+                        """INSERT INTO locations
+                           (code, cooler_name, cooler_code, shelf, slot, shared, screen)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        (code, cooler["name"], cooler["code"], shelf_num, slot, shared, screen),
+                    )
+                    added += 1
+    db.commit()
+    if added:
+        print(f"Added {added} new location(s) from config.py.")
     db.close()
 
 
@@ -197,17 +228,27 @@ def location_text(row):
     return f"{row['cooler_name']} - Shelf {row['shelf']}{row['slot'] or ''}"
 
 
+def generate_qr_png(data):
+    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=2)
+    qr.add_data(data)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 # ------------------------------------------------------------------- pages --
 @app.route("/")
 @login_required
 def index():
-    return render_template("board.html")
+    return render_template("board.html", screens=config.BOARD_SCREENS)
 
 
 @app.route("/board")
 @login_required
 def board_page():
-    return render_template("board.html")
+    return render_template("board.html", screens=config.BOARD_SCREENS)
 
 
 @app.route("/scan")
@@ -250,14 +291,8 @@ def case_qr_image(case_code):
     page -- scanning it with ANY phone camera (not just this app) opens
     that page directly."""
     target_url = request.host_url.rstrip("/") + url_for("case_detail_page", case_code=case_code)
-    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=2)
-    qr.add_data(target_url)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    buf.seek(0)
-    resp = app.response_class(buf.read(), mimetype="image/png")
+    png_bytes = generate_qr_png(target_url)
+    resp = app.response_class(png_bytes, mimetype="image/png")
     resp.headers["Cache-Control"] = "no-cache"
     return resp
 
@@ -290,13 +325,54 @@ def api_board():
     rows = db.execute(
         """
         SELECT l.code AS location_code, l.cooler_name, l.cooler_code, l.shelf, l.slot, l.shared,
-               c.case_code, c.name, c.funeral_home, c.pickup_date, c.status
+               l.screen, c.case_code, c.name, c.funeral_home, c.pickup_date, c.status
         FROM locations l
         LEFT JOIN cases c ON c.location_id = l.id AND c.status = 'placed'
         ORDER BY l.cooler_code, l.shelf, l.slot
         """
     ).fetchall()
     return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/board/export.csv")
+@login_required
+def api_board_export():
+    """Current placement table, exportable/printable as a spreadsheet."""
+    db = get_db()
+    rows = db.execute(
+        """
+        SELECT l.cooler_name, l.screen, l.shelf, l.slot,
+               c.case_code, c.name, c.funeral_home, c.pickup_date
+        FROM locations l
+        JOIN cases c ON c.location_id = l.id AND c.status = 'placed'
+        ORDER BY l.cooler_code, l.shelf, l.slot
+        """
+    ).fetchall()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(
+        ["Cooler", "Screen", "Shelf", "Slot", "Case", "Name", "Funeral Home", "Pickup Date"]
+    )
+    for r in rows:
+        writer.writerow(
+            [
+                r["cooler_name"],
+                r["screen"],
+                r["shelf"],
+                r["slot"] or "",
+                r["case_code"],
+                r["name"] or "",
+                r["funeral_home"] or "",
+                r["pickup_date"] or "",
+            ]
+        )
+
+    resp = app.response_class(buf.getvalue(), mimetype="text/csv")
+    resp.headers["Content-Disposition"] = (
+        f"attachment; filename=cooler-board-{datetime.now().strftime('%Y-%m-%d')}.csv"
+    )
+    return resp
 
 
 @app.route("/api/case/lookup", methods=["POST"])
@@ -323,7 +399,13 @@ def api_case_lookup():
 @app.route("/api/case/<case_code>/info", methods=["POST"])
 @login_required
 def api_case_info(case_code):
-    """Save/edit intake info: name, funeral home, pickup date."""
+    """
+    Save/edit intake info: name, funeral home, pickup date. Used by the
+    scan station's Field Intake/Assign flows AND the board's click-to-edit
+    -- either way, syncs back to the sheet the same as sheet-intake save
+    does, so an edit made from the board doesn't fall out of sync with
+    the call log.
+    """
     data = request.get_json(force=True)
     db = get_db()
     row = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
@@ -334,21 +416,54 @@ def api_case_info(case_code):
     if new_status == "pending_info":
         new_status = "pending_location"
 
+    name = data.get("name", row["name"])
+    funeral_home = data.get("funeral_home", row["funeral_home"])
+    pickup_date = data.get("pickup_date", row["pickup_date"])
+
     db.execute(
         """UPDATE cases
            SET name = ?, funeral_home = ?, pickup_date = ?, status = ?
            WHERE case_code = ?""",
-        (
-            data.get("name", row["name"]),
-            data.get("funeral_home", row["funeral_home"]),
-            data.get("pickup_date", row["pickup_date"]),
-            new_status,
-            case_code,
-        ),
+        (name, funeral_home, pickup_date, new_status, case_code),
     )
     db.commit()
+
+    sheet_warning = None
+    if config.GOOGLE_SHEETS_ENABLED:
+        try:
+            sheet_row = _sheets().find_row_for_case(case_code)
+            if sheet_row:
+                _sheets().backfill_intake(
+                    sheet_row, format_date_for_sheet(pickup_date), name, funeral_home
+                )
+        except Exception as e:
+            sheet_warning = f"Saved locally, but sheet write failed: {e}"
+
     row = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
-    return jsonify(dict(row))
+    resp = dict(row)
+    if sheet_warning:
+        resp["sheet_warning"] = sheet_warning
+    return jsonify(resp)
+
+
+def _backfill_case_location(case_code, loc):
+    """Writes a case's current location into the sheet -- shared by both
+    Assign (first placement) and Move (relocation), so a moved decedent's
+    COOLER LOCATION column stays accurate instead of only reflecting
+    wherever they were FIRST placed."""
+    if not config.GOOGLE_SHEETS_ENABLED:
+        return None
+    try:
+        sheet_row = _sheets().find_row_for_case(case_code)
+        if sheet_row:
+            loc_text = f"{loc['cooler_name']} - Shelf {loc['shelf']}{loc['slot'] or ''}"
+            _sheets().backfill_location(sheet_row, loc_text)
+        return None
+    except Exception as e:
+        # Local placement already succeeded and is the source of truth
+        # for the board -- a sheet write failure here is a warning, not
+        # a reason to undo the placement.
+        return f"Placed locally, but sheet write failed: {e}"
 
 
 @app.route("/api/assign", methods=["POST"])
@@ -384,18 +499,7 @@ def api_assign():
     )
     db.commit()
 
-    sheet_warning = None
-    if config.GOOGLE_SHEETS_ENABLED:
-        try:
-            sheet_row = _sheets().find_row_for_case(case_code)
-            if sheet_row:
-                loc_text = f"{loc['cooler_name']} - Shelf {loc['shelf']}{loc['slot'] or ''}"
-                _sheets().backfill_location(sheet_row, loc_text)
-        except Exception as e:
-            # Local assignment already succeeded and is the source of
-            # truth for the board -- a sheet write failure here is a
-            # warning, not a reason to undo the placement.
-            sheet_warning = f"Placed locally, but sheet write failed: {e}"
+    sheet_warning = _backfill_case_location(case_code, loc)
 
     resp = dict(ok=True, case_code=case_code, location_code=location_code)
     if sheet_warning:
@@ -433,15 +537,23 @@ def api_move():
         (case["id"], old_loc_id, new_loc["id"], now()),
     )
     db.commit()
-    return jsonify(ok=True, case_code=case_code, location_code=location_code)
+
+    sheet_warning = _backfill_case_location(case_code, new_loc)
+
+    resp = dict(ok=True, case_code=case_code, location_code=location_code)
+    if sheet_warning:
+        resp["sheet_warning"] = sheet_warning
+    return jsonify(**resp)
 
 
 @app.route("/api/release", methods=["POST"])
 @login_required
 def api_release():
-    """Pickup / removal: frees the slot."""
+    """Pickup / removal: frees the slot, records who/where the decedent
+    was released to, both locally and back into the sheet."""
     data = request.get_json(force=True)
     case_code = data.get("case_code")
+    released_to = (data.get("released_to") or "").strip()
     db = get_db()
 
     case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
@@ -449,15 +561,28 @@ def api_release():
         return jsonify(error="Case is not currently placed"), 400
 
     db.execute(
-        "UPDATE cases SET status = 'released', released_at = ? WHERE id = ?",
-        (now(), case["id"]),
+        "UPDATE cases SET status = 'released', released_at = ?, released_to = ? WHERE id = ?",
+        (now(), released_to, case["id"]),
     )
     db.execute(
         "INSERT INTO moves (case_id, from_location_id, to_location_id, action, timestamp) VALUES (?, ?, NULL, 'released', ?)",
         (case["id"], case["location_id"], now()),
     )
     db.commit()
-    return jsonify(ok=True, case_code=case_code)
+
+    sheet_warning = None
+    if config.GOOGLE_SHEETS_ENABLED and released_to:
+        try:
+            sheet_row = _sheets().find_row_for_case(case_code)
+            if sheet_row:
+                _sheets().backfill_released_to(sheet_row, released_to)
+        except Exception as e:
+            sheet_warning = f"Released locally, but sheet write failed: {e}"
+
+    resp = dict(ok=True, case_code=case_code)
+    if sheet_warning:
+        resp["sheet_warning"] = sheet_warning
+    return jsonify(**resp)
 
 
 @app.route("/api/intake-sync", methods=["POST"])
@@ -583,6 +708,16 @@ def api_sheet_intake_save():
                 _sheets().backfill_intake(
                     sheet_row, format_date_for_sheet(pickup_date), name, funeral_home
                 )
+                # QR column: only generate/upload once per case -- once a
+                # row has a QR image, re-saving edited info shouldn't spam
+                # Drive with a new upload every time.
+                if not _sheets().row_has_qr(sheet_row):
+                    target_url = request.host_url.rstrip("/") + url_for(
+                        "case_detail_page", case_code=case_code
+                    )
+                    png_bytes = generate_qr_png(target_url)
+                    drive_url = _sheets().upload_qr_to_drive(case_code, png_bytes)
+                    _sheets().backfill_qr(sheet_row, drive_url)
         except Exception as e:
             # Local save already succeeded -- don't fail the whole request
             # over a sheet write hiccup, just tell the caller it happened.
