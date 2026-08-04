@@ -9,6 +9,20 @@ const saveInfoBtn = document.getElementById("saveInfoBtn");
 const pendingBadge = document.getElementById("pendingBadge");
 const startSheetCaseBtn = document.getElementById("startSheetCaseBtn");
 
+// Declared here (not down by the rest of the camera code) because
+// resetFlow() calls stopCamera() on every run, including the very first
+// call below -- if these were still declared with let/const further down
+// the file, that first call would throw "Cannot access before
+// initialization" and abort the rest of this script's setup.
+const cameraBtn = document.getElementById("cameraBtn");
+const cameraStopBtn = document.getElementById("cameraStopBtn");
+const cameraPanel = document.getElementById("cameraPanel");
+const cameraVideo = document.getElementById("cameraVideo");
+const cameraCanvas = document.getElementById("cameraCanvas");
+let cameraStream = null;
+let cameraLoopId = null;
+let cameraCooldown = false; // prevents re-firing on the same code every frame
+
 let mode = "sheet-intake";
 let step = "case";       // case | location
 let currentCaseCode = null;
@@ -347,15 +361,6 @@ window.addEventListener("load", () => {
 setInterval(flushQueue, 20000);
 
 // ---------------- Camera scanning (jsQR, fully local — no CDN) ----------------
-const cameraBtn = document.getElementById("cameraBtn");
-const cameraStopBtn = document.getElementById("cameraStopBtn");
-const cameraPanel = document.getElementById("cameraPanel");
-const cameraVideo = document.getElementById("cameraVideo");
-const cameraCanvas = document.getElementById("cameraCanvas");
-let cameraStream = null;
-let cameraLoopId = null;
-let cameraCooldown = false; // prevents re-firing on the same code every frame
-
 cameraBtn.addEventListener("click", startCamera);
 cameraStopBtn.addEventListener("click", stopCamera);
 
