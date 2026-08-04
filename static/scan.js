@@ -487,7 +487,16 @@ async function startCamera() {
   }
   try {
     cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment" },
+      // Without a resolution cap, many phones default to their camera's
+      // native resolution (often 4K+) for this stream -- decoding a
+      // frame that large with jsQR on every tick is slow enough to make
+      // scanning feel laggy/finicky. 1280x720 is still far more detail
+      // than a QR code needs and decodes many times faster per frame.
+      video: {
+        facingMode: "environment",
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
     });
   } catch (err) {
     showStatus("Camera permission denied or unavailable: " + err.message, false);
@@ -518,7 +527,13 @@ function cameraLoop() {
     cameraCanvas.height = cameraVideo.videoHeight;
     ctx.drawImage(cameraVideo, 0, 0, cameraCanvas.width, cameraCanvas.height);
     const imageData = ctx.getImageData(0, 0, cameraCanvas.width, cameraCanvas.height);
-    const result = jsQR(imageData.data, imageData.width, imageData.height);
+    // dontInvert: every printed tag is plain black-on-white (see
+    // gen_location_qr.py / the QR label routes in app.py), so the
+    // inverted-colors decode pass jsQR tries by default is pure wasted
+    // work here -- skipping it roughly halves the time spent per frame.
+    const result = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: "dontInvert",
+    });
     if (result && result.data && !cameraCooldown) {
       cameraCooldown = true;
       processScannedCode(result.data.trim()).finally(() => {
