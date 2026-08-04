@@ -329,11 +329,23 @@ def case_detail_page(case_code):
     app can scan it straight into this page (after the usual passcode
     gate). Shows name, funeral home, pickup date, and the CURRENT
     shelf/slot, looked up live so it's never stale if the decedent moves.
+
+    Once released/cremated, the tag is treated as deactivated: instead
+    of ongoing operational details, scanning it just confirms the case
+    is closed -- so a tag that ends up somewhere it shouldn't (or gets
+    scanned after the fact) doesn't keep exposing live case info.
     """
     db = get_db()
     row = get_case_with_location(db, case_code)
+    released_date = None
+    if row is not None and row["status"] == "released" and row["released_at"]:
+        released_date = format_date_for_sheet(row["released_at"].split(" ")[0])
     return render_template(
-        "case_detail.html", case=row, case_code=case_code, loc_text=location_text(row)
+        "case_detail.html",
+        case=row,
+        case_code=case_code,
+        loc_text=location_text(row),
+        released_date=released_date,
     )
 
 

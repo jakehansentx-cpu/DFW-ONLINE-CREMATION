@@ -15,6 +15,12 @@
   <div class="scan-panel">
     {% if case is none %}
       <div class="status-msg err">No case found for {{ case_code }}.</div>
+    {% elif case.status == "released" %}
+      <div class="status-msg" style="font-size:18px; line-height:1.6;">
+        <b>Case {{ case_code }} — closed.</b><br>
+        Released{% if case.released_to %} to {{ case.released_to }}{% endif %}{% if released_date %} on {{ released_date }}{% endif %}.<br>
+        <span style="color:#889; font-size:14px;">This tag is no longer active for placement or tracking.</span>
+      </div>
     {% else %}
       <div class="info-form" style="display:block;">
         <label>Name</label>

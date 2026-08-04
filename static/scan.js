@@ -178,6 +178,10 @@ async function handleCaseScan(rawCode) {
       showStatus(`${code} is already placed. Use Move instead.`, false);
       return;
     }
+    if (caseData.status === "released") {
+      showStatus(`${code} has already been released/cremated. This tag is no longer active.`, false);
+      return;
+    }
     if (caseData.status === "pending_info") {
       infoFormTitle.textContent = `Case ${code} — Enter Details`;
       infoForm.classList.remove("hidden");
@@ -188,7 +192,7 @@ async function handleCaseScan(rawCode) {
       showStatus(`New case ${code}. Fill in details below.`, true);
       return;
     }
-    // pending_location already
+    // pending_location
     step = "location";
     stepLabel.textContent = `Now scan the SLOT location for ${code}`;
     showStatus(`${code} recognized. Scan a slot location.`, true);
