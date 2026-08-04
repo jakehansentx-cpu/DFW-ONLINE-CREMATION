@@ -281,7 +281,12 @@ def case_print_page(case_code):
     row = get_case_with_location(db, case_code)
     if row is None:
         return jsonify(error="Unknown case code -- start intake first"), 404
-    return render_template("case_print.html", case=row, case_code=case_code)
+    return render_template(
+        "case_print.html",
+        case=row,
+        case_code=case_code,
+        pickup_date=format_date_for_sheet(row["pickup_date"]),
+    )
 
 
 @app.route("/case/<case_code>/qr.png")

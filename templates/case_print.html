@@ -7,19 +7,61 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 <style>
   .print-toolbar { text-align: center; padding: 16px; }
+
   #label {
-    width: 2.5in;
+    width: 3.2in;
+    height: 1.1in;
     margin: 0 auto;
-    text-align: center;
-    padding: 12px;
+    padding: 0.1in;
     border: 1px dashed #667;
-    color: #101418;
     background: #fff;
+    color: #14151a;
+    display: flex;
+    align-items: stretch;
+    gap: 0.14in;
   }
-  #label img { width: 100%; height: auto; display: block; }
-  #label .case-code { font-weight: bold; font-size: 15px; margin-top: 6px; }
-  #label .case-name { font-size: 13px; margin-top: 2px; }
-  #label .case-home { font-size: 11px; color: #333; }
+  #label .qr-box {
+    flex: 0 0 auto;
+    width: 1.1in;
+    height: 1.1in;
+  }
+  #label .qr-box img { width: 100%; height: 100%; display: block; }
+
+  #label .text-block {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.04in;
+    border-left: 1px solid #e4e1d9;
+    padding-left: 0.14in;
+  }
+  #label .line-name {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-weight: 700;
+    font-size: 15pt;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #label .line-home {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-weight: 500;
+    font-size: 10pt;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #label .line-date {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-weight: 400;
+    font-size: 9pt;
+    line-height: 1.2;
+    color: #4a4d54;
+  }
 
   @media print {
     body * { visibility: hidden; }
@@ -35,10 +77,14 @@
   </div>
 
   <div id="label">
-    <img src="{{ url_for('case_qr_image', case_code=case_code) }}" alt="QR code for {{ case_code }}">
-    <div class="case-code">{{ case_code }}</div>
-    {% if case.name %}<div class="case-name">{{ case.name }}</div>{% endif %}
-    {% if case.funeral_home %}<div class="case-home">{{ case.funeral_home }}</div>{% endif %}
+    <div class="qr-box">
+      <img src="{{ url_for('case_qr_image', case_code=case_code) }}" alt="QR code for {{ case_code }}">
+    </div>
+    <div class="text-block">
+      <div class="line-name">{{ case.name or case_code }}</div>
+      <div class="line-home">{{ case.funeral_home or "" }}</div>
+      <div class="line-date">{{ pickup_date or "" }}</div>
+    </div>
   </div>
 </body>
 </html>
