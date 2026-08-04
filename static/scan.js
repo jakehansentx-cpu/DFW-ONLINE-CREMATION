@@ -63,7 +63,12 @@ function resetFlow() {
   if (typeof stopCamera === "function") stopCamera();
 
   const isSheetIntake = mode === "sheet-intake";
-  scanInput.classList.toggle("hidden", isSheetIntake);
+  // Manual scan input box is hidden everywhere -- this station only uses
+  // the camera. Left in the DOM (not deleted) so it's a one-line change
+  // to bring back if a physical USB/Bluetooth barcode scanner is ever
+  // added later; it still works as a scan target either way, it's just
+  // not shown or auto-focused.
+  scanInput.classList.add("hidden");
   startSheetCaseBtn.classList.toggle("hidden", !isSheetIntake);
 
   if (mode === "sheet-intake") stepLabel.textContent = "Tap to pull the next case number from the sheet";
@@ -73,7 +78,6 @@ function resetFlow() {
   if (mode === "release") stepLabel.textContent = "Scan the Case ID to release / mark picked up";
   if (mode === "checkout") stepLabel.textContent = "Scan the Case ID to check out or check back in";
   scanInput.value = "";
-  if (!isSheetIntake) scanInput.focus();
 }
 resetBtn.addEventListener("click", resetFlow);
 
