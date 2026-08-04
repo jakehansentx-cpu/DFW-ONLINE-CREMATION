@@ -21,6 +21,7 @@ from pathlib import Path
 from flask import Flask, g, jsonify, render_template, request, session, redirect, url_for
 
 import qrcode
+from PIL import Image, ImageDraw, ImageFont
 
 import config
 
@@ -238,6 +239,69 @@ def generate_qr_png(data):
     return buf.getvalue()
 
 
+def _load_font(bold, size):
+    """Tries common system font locations (Windows/Mac/Linux) before
+    falling back to Pillow's own built-in font, so label generation
+    never crashes just because a particular font file isn't installed."""
+    names = (
+        ["arialbd.ttf", "Arial Bold.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf", "DejaVuSans-Bold.ttf"]
+        if bold
+        else ["arial.ttf", "Arial.ttf", "/System/Library/Fonts/Supplemental/Arial.ttf", "DejaVuSans.ttf"]
+    )
+    for name in names:
+        try:
+            return ImageFont.truetype(name, size)
+        except OSError:
+            continue
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
+
+
+def generate_label_image(case_code, name, funeral_home, pickup_date, target_url):
+    """
+    Composites the full armband tag -- QR on the left, name/funeral
+    home/date stacked on the right -- into a single flat PNG at 300dpi,
+    matching the printable page's layout exactly. Meant for label
+    printers/apps that expect a plain image rather than a browser print
+    dialog.
+    """
+    dpi = 300
+    width, height = round(3.2 * dpi), round(1.1 * dpi)
+    margin = round(0.1 * dpi)
+    qr_size = height - 2 * margin
+
+    img = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(img)
+    draw.rectangle([(0, 0), (width - 1, height - 1)], outline=(102, 102, 119), width=2)
+
+    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=1)
+    qr.add_data(target_url)
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+    qr_img = qr_img.resize((qr_size, qr_size))
+    img.paste(qr_img, (margin, margin))
+
+    line_x = margin + qr_size + round(0.07 * dpi)
+    draw.line([(line_x, margin), (line_x, height - margin)], fill=(228, 225, 217), width=2)
+
+    text_x = line_x + round(0.14 * dpi)
+    draw.text(
+        (text_x, round(0.16 * dpi)), name or case_code, font=_load_font(True, 46), fill=(20, 21, 26)
+    )
+    draw.text(
+        (text_x, round(0.48 * dpi)), funeral_home or "", font=_load_font(False, 30), fill=(51, 54, 61)
+    )
+    draw.text(
+        (text_x, round(0.74 * dpi)), pickup_date or "", font=_load_font(False, 26), fill=(74, 77, 84)
+    )
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", dpi=(dpi, dpi))
+    return buf.getvalue()
+
+
 # ------------------------------------------------------------------- pages --
 @app.route("/")
 @login_required
@@ -299,6 +363,29 @@ def case_qr_image(case_code):
     png_bytes = generate_qr_png(target_url)
     resp = app.response_class(png_bytes, mimetype="image/png")
     resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.route("/case/<case_code>/label.png")
+@login_required
+def case_label_image(case_code):
+    """Downloadable flat image of the whole armband tag -- for label
+    printer apps that need a plain image file instead of a browser
+    print dialog."""
+    db = get_db()
+    row = get_case_with_location(db, case_code)
+    if row is None:
+        return jsonify(error="Unknown case code"), 404
+    target_url = request.host_url.rstrip("/") + url_for("case_detail_page", case_code=case_code)
+    png_bytes = generate_label_image(
+        case_code,
+        row["name"],
+        row["funeral_home"],
+        format_date_for_sheet(row["pickup_date"]),
+        target_url,
+    )
+    resp = app.response_class(png_bytes, mimetype="image/png")
+    resp.headers["Content-Disposition"] = f"attachment; filename=armband-{case_code}.png"
     return resp
 
 

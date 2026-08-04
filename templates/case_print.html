@@ -74,6 +74,7 @@
 <body class="scan-body">
   <div class="print-toolbar">
     <button class="primary-btn" onclick="window.print()">Print</button>
+    <a class="secondary-btn" href="{{ url_for('case_label_image', case_code=case_code) }}" download="armband-{{ case_code }}.png" style="display:inline-block; text-decoration:none; margin-top:10px;">Download Image</a>
   </div>
 
   <div id="label">
