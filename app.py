@@ -11,12 +11,15 @@ laptop). Point the TV-side browser at /board and the tablet at /scan.
     #   TV / mirrored tablet browser -> http://<this-machine-ip>:5000/board
     #   Tablet input browser         -> http://<this-machine-ip>:5000/scan
 """
+import io
 import sqlite3
 import secrets
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
 from flask import Flask, g, jsonify, render_template, request, session, redirect, url_for
+
+import qrcode
 
 import config
 
@@ -173,6 +176,27 @@ def format_date_for_sheet(iso_date):
         return iso_date  # unexpected format -- write it through as-is rather than crash
 
 
+def get_case_with_location(db, case_code):
+    """Case info plus its CURRENT shelf/slot via a live join -- never bakes
+    a location into anything printed/cached, since a decedent can move
+    after a tag is printed."""
+    return db.execute(
+        """
+        SELECT c.*, l.cooler_name, l.shelf, l.slot
+        FROM cases c
+        LEFT JOIN locations l ON l.id = c.location_id
+        WHERE c.case_code = ?
+        """,
+        (case_code,),
+    ).fetchone()
+
+
+def location_text(row):
+    if row is None or row["location_id"] is None or row["status"] != "placed":
+        return None
+    return f"{row['cooler_name']} - Shelf {row['shelf']}{row['slot'] or ''}"
+
+
 # ------------------------------------------------------------------- pages --
 @app.route("/")
 @login_required
@@ -190,6 +214,52 @@ def board_page():
 @login_required
 def scan_page():
     return render_template("scan.html")
+
+
+@app.route("/case/<case_code>")
+@login_required
+def case_detail_page(case_code):
+    """
+    What a printed armband QR code opens to -- any phone's default camera
+    app can scan it straight into this page (after the usual passcode
+    gate). Shows name, funeral home, pickup date, and the CURRENT
+    shelf/slot, looked up live so it's never stale if the decedent moves.
+    """
+    db = get_db()
+    row = get_case_with_location(db, case_code)
+    return render_template(
+        "case_detail.html", case=row, case_code=case_code, loc_text=location_text(row)
+    )
+
+
+@app.route("/case/<case_code>/print")
+@login_required
+def case_print_page(case_code):
+    """Printable armband tag: QR code + human-readable case/name text."""
+    db = get_db()
+    row = get_case_with_location(db, case_code)
+    if row is None:
+        return jsonify(error="Unknown case code -- start intake first"), 404
+    return render_template("case_print.html", case=row, case_code=case_code)
+
+
+@app.route("/case/<case_code>/qr.png")
+@login_required
+def case_qr_image(case_code):
+    """The QR image itself, encoding the full URL to this case's detail
+    page -- scanning it with ANY phone camera (not just this app) opens
+    that page directly."""
+    target_url = request.host_url.rstrip("/") + url_for("case_detail_page", case_code=case_code)
+    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=2)
+    qr.add_data(target_url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    resp = app.response_class(buf.read(), mimetype="image/png")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 
 @app.route("/camera-test")

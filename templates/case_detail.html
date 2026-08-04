@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Case {{ case_code }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="scan-body">
+  <header class="scan-header">
+    <h1>Case {{ case_code }}</h1>
+    <div style="text-align:center;"><a href="/scan" style="color:#889; font-size:13px;">Scan station</a></div>
+  </header>
+
+  <div class="scan-panel">
+    {% if case is none %}
+      <div class="status-msg err">No case found for {{ case_code }}.</div>
+    {% else %}
+      <div class="info-form" style="display:block;">
+        <label>Name</label>
+        <div style="padding:8px 0; font-size:18px;">{{ case.name or "—" }}</div>
+        <label>Funeral Home</label>
+        <div style="padding:8px 0; font-size:18px;">{{ case.funeral_home or "—" }}</div>
+        <label>Pickup Date</label>
+        <div style="padding:8px 0; font-size:18px;">{{ case.pickup_date or "—" }}</div>
+        <label>Location</label>
+        <div style="padding:8px 0; font-size:18px;">{{ loc_text or "Not yet placed" }}</div>
+      </div>
+      <div class="reset-row">
+        <a class="secondary-btn" href="{{ url_for('case_print_page', case_code=case_code) }}" style="text-decoration:none; display:inline-block;">Print Tag</a>
+      </div>
+    {% endif %}
+  </div>
+</body>
+</html>

@@ -8,6 +8,7 @@ const resetBtn = document.getElementById("resetBtn");
 const saveInfoBtn = document.getElementById("saveInfoBtn");
 const pendingBadge = document.getElementById("pendingBadge");
 const startSheetCaseBtn = document.getElementById("startSheetCaseBtn");
+const printTagLink = document.getElementById("printTagLink");
 
 // Declared here (not down by the rest of the camera code) because
 // resetFlow() calls stopCamera() on every run, including the very first
@@ -40,6 +41,7 @@ function resetFlow() {
   currentCaseCode = null;
   currentSheetRow = null;
   infoForm.classList.add("hidden");
+  printTagLink.classList.add("hidden");
   statusMsg.textContent = "";
   statusMsg.className = "status-msg";
   if (typeof stopCamera === "function") stopCamera();
@@ -69,6 +71,8 @@ startSheetCaseBtn.addEventListener("click", async () => {
     document.getElementById("fHome").value = "";
     document.getElementById("fDate").value = "";
     saveInfoBtn.textContent = "Save (writes to sheet + this app)";
+    printTagLink.href = `/case/${encodeURIComponent(currentCaseCode)}/print`;
+    printTagLink.classList.remove("hidden");
     showStatus(`Pulled ${currentCaseCode} from the sheet. Fill in details.`, true);
   } catch (err) {
     showStatus(err.message, false);
@@ -121,8 +125,21 @@ async function processScannedCode(code) {
   }
 }
 
-async function handleCaseScan(code) {
-  if (!code.startsWith("CASE|")) {
+// Printed armband tags now encode a full URL (http://host/case/<code>) so
+// any phone's default camera app can open them directly -- but scanning
+// one here (physical scanner or in-app camera) still needs to drive the
+// Assign/Move/Release flow, so pull the bare case code back out of it.
+// Older pre-printed "CASE|<id>" tags still work unchanged.
+function normalizeCaseCode(raw) {
+  const urlMatch = raw.match(/\/case\/([^/?#]+)\/?$/);
+  if (urlMatch) return decodeURIComponent(urlMatch[1]);
+  if (raw.startsWith("CASE|")) return raw;
+  return null;
+}
+
+async function handleCaseScan(rawCode) {
+  const code = normalizeCaseCode(rawCode);
+  if (!code) {
     showStatus("That doesn't look like a Case ID tag.", false);
     return;
   }
