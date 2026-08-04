@@ -151,7 +151,10 @@ def upload_qr_to_drive(case_code, png_bytes):
     file = (
         drive.files()
         .create(
-            body={"name": f"case-qr-{case_code}.png"},
+            body={
+                "name": f"case-qr-{case_code}.png",
+                "parents": [config.GOOGLE_DRIVE_QR_FOLDER_ID],
+            },
             media_body=media,
             fields="id",
         )

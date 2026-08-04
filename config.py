@@ -42,6 +42,13 @@ GOOGLE_SERVICE_ACCOUNT_FILE = "service_account.json"
 GOOGLE_SHEET_ID = "1QzFHSraw7OTfJKp-UrP0nSpZJB5WxgLUPadiWiNLVbE"  # "JULY CALL LOG"
 GOOGLE_SHEET_TAB = ""  # leave blank unless you have multiple tabs and need a specific one
 
+# Case QR images get uploaded here. Service accounts have no Drive
+# storage quota of their own (a Google-wide rule, not something this app
+# controls) -- so this must be a folder owned by a real Google account
+# and shared with the service account (Editor access), so uploads count
+# against that account's quota instead.
+GOOGLE_DRIVE_QR_FOLDER_ID = "1vOuuv7Bm0jHorkavl9LtyZWuTBtndWCQ"
+
 COOLERS = [
     {
         "name": "Metro Large Cooler",
