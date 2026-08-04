@@ -481,6 +481,29 @@ setInterval(flushQueue, 20000);
 cameraBtn.addEventListener("click", startCamera);
 cameraStopBtn.addEventListener("click", stopCamera);
 
+// Synthesized beep (Web Audio API) instead of an audio file -- keeps this
+// fully local/offline like everything else here, and it's just a couple
+// lines either way. Browsers only allow audio to start from a real user
+// gesture, so the AudioContext gets created/resumed inside startCamera()
+// (a click handler), not lazily on the first scan.
+let audioCtx = null;
+function playBeep() {
+  try {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.frequency.value = 1500;
+    gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.12);
+  } catch (e) {
+    // Audio blocked/unavailable -- scanning itself still works fine either way.
+  }
+}
+
 async function startCamera() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     showStatus(
@@ -506,6 +529,11 @@ async function startCamera() {
     showStatus("Camera permission denied or unavailable: " + err.message, false);
     return;
   }
+  if (!audioCtx && (window.AudioContext || window.webkitAudioContext)) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+
   cameraVideo.srcObject = cameraStream;
   cameraVideo.muted = true;
   await cameraVideo.play();
@@ -540,6 +568,7 @@ function cameraLoop() {
     });
     if (result && result.data && !cameraCooldown) {
       cameraCooldown = true;
+      playBeep();
       processScannedCode(result.data.trim()).finally(() => {
         setTimeout(() => { cameraCooldown = false; }, 1500);
       });
