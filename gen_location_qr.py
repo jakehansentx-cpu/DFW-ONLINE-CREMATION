@@ -3,6 +3,15 @@ Generates printable QR code labels for the cooler location system, using
 the same config.py the app itself reads -- edit config.py, then rerun this
 script to get matching labels. Every QR encodes ONLY a plain internal ID
 string (e.g. LOC|METRO-LG|S01|A) -- no URL, no internet call, no PII.
+
+Usage:
+    python gen_location_qr.py                       -- every cooler
+    python gen_location_qr.py CREM-STAGE             -- just one cooler
+    python gen_location_qr.py CREM-STAGE CREM-STAGE-BIERS
+                                                      -- just these coolers
+(cooler codes are the short "code" values from config.py, e.g. METRO-LG,
+CREM-STAGE -- printed in the summary at the end of a run so you can see
+them all.)
 """
 import sys
 import os
@@ -68,8 +77,19 @@ def build_label_sheet(filename, labels, cols=4, rows=5, label_w=1.9 * inch, labe
 
 
 # ---- Build location labels from config.py ----
+# Optional cooler-code filter, e.g. `python gen_location_qr.py CREM-STAGE`
+# -- keeps you from reprinting labels you already have every time you add
+# one new cooler.
+wanted_codes = set(sys.argv[1:]) or None
+coolers = [c for c in COOLERS if wanted_codes is None or c["code"] in wanted_codes]
+if wanted_codes and not coolers:
+    print(f"No coolers matched {sorted(wanted_codes)}. Known codes:")
+    for c in COOLERS:
+        print(f"  {c['code']} ({c['name']})")
+    sys.exit(1)
+
 location_labels = []
-for cooler in COOLERS:
+for cooler in coolers:
     for shelf_num, slots in cooler["shelves"]:
         for slot in slots:
             if slot:
@@ -80,8 +100,9 @@ for cooler in COOLERS:
                 line2 = f"Shelf {shelf_num}"
             location_labels.append((code, cooler["name"], line2))
 
-build_label_sheet("/mnt/user-data/outputs/location_qr_labels.pdf", location_labels)
-print(f"Location labels generated: {len(location_labels)} -> location_qr_labels.pdf")
-for cooler in COOLERS:
+out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "location_qr_labels.pdf")
+build_label_sheet(out_path, location_labels)
+print(f"Location labels generated: {len(location_labels)} -> {out_path}")
+for cooler in coolers:
     n = sum(len(slots) for _, slots in cooler["shelves"])
-    print(f"  {cooler['name']}: {n} locations")
+    print(f"  {cooler['name']} ({cooler['code']}): {n} locations")
