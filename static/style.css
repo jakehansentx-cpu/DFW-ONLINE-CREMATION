@@ -169,7 +169,7 @@ body {
 .info-form { background: #1a1f26; border-radius: 10px; padding: 20px; margin-top: 16px; }
 .info-form.hidden { display: none; }
 .info-form label { display: block; margin-top: 10px; font-size: 14px; color: #aab; }
-.info-form input {
+.info-form input, .info-form select {
   width: 100%; font-size: 18px; padding: 10px; margin-top: 4px;
   border-radius: 6px; border: 1px solid #333; background: #0d1116; color: #fff;
 }

@@ -21,6 +21,12 @@
         Released{% if case.released_to %} to {{ case.released_to }}{% endif %}{% if released_date %} on {{ released_date }}{% endif %}.<br>
         <span style="color:#889; font-size:14px;">This tag is no longer active for placement or tracking.</span>
       </div>
+    {% elif case.status == "checked_out" %}
+      <div class="status-msg" style="font-size:18px; line-height:1.6;">
+        <b>Case {{ case_code }} — {{ case.name or "checked out" }}.</b><br>
+        Temporarily checked out to {{ case.checkout_org or "—" }}{% if case.checkout_reason %} ({{ case.checkout_reason }}){% endif %}{% if checked_out_date %} since {{ checked_out_date }}{% endif %}.<br>
+        <span style="color:#889; font-size:14px;">This tag is still active — scan it again at the Check Out/In station once the decedent returns.</span>
+      </div>
     {% else %}
       <div class="info-form" style="display:block;">
         <label>Name</label>

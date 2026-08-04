@@ -16,6 +16,9 @@ Column layout (matches your sheet):
         way -- this column is just a convenience shortcut from the
         sheet.
     N = released to -- who/where the decedent was released to
+    O = checkout status -- filled in while a decedent is temporarily
+        checked out (autopsy, organ/tissue donation, etc.), cleared
+        back to blank once checked back in
 
 "Next available case number" = the first row, scanning top to bottom,
 where column A has a value but B, D, and E are all still empty. That's
@@ -149,4 +152,17 @@ def backfill_released_to(row_num, released_to):
         range=_sheet_range(f"N{row_num}"),
         valueInputOption="USER_ENTERED",
         body={"values": [[released_to]]},
+    ).execute()
+
+
+def backfill_checkout(row_num, summary):
+    """Writes the current checkout status into column O -- an empty
+    string clears it back to blank once the decedent is checked back
+    in."""
+    service = _get_service()
+    service.spreadsheets().values().update(
+        spreadsheetId=config.GOOGLE_SHEET_ID,
+        range=_sheet_range(f"O{row_num}"),
+        valueInputOption="USER_ENTERED",
+        body={"values": [[summary]]},
     ).execute()

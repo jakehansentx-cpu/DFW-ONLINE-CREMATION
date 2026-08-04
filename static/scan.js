@@ -13,6 +13,15 @@ const releaseForm = document.getElementById("releaseForm");
 const releaseFormTitle = document.getElementById("releaseFormTitle");
 const releasedTo = document.getElementById("releasedTo");
 const confirmReleaseBtn = document.getElementById("confirmReleaseBtn");
+const checkoutForm = document.getElementById("checkoutForm");
+const checkoutFormTitle = document.getElementById("checkoutFormTitle");
+const checkoutOrg = document.getElementById("checkoutOrg");
+const checkoutReason = document.getElementById("checkoutReason");
+const confirmCheckoutBtn = document.getElementById("confirmCheckoutBtn");
+const checkinForm = document.getElementById("checkinForm");
+const checkinFormTitle = document.getElementById("checkinFormTitle");
+const checkinInfo = document.getElementById("checkinInfo");
+const confirmCheckinBtn = document.getElementById("confirmCheckinBtn");
 
 // Declared here (not down by the rest of the camera code) because
 // resetFlow() calls stopCamera() on every run, including the very first
@@ -46,6 +55,8 @@ function resetFlow() {
   currentSheetRow = null;
   infoForm.classList.add("hidden");
   releaseForm.classList.add("hidden");
+  checkoutForm.classList.add("hidden");
+  checkinForm.classList.add("hidden");
   printTagLink.classList.add("hidden");
   statusMsg.textContent = "";
   statusMsg.className = "status-msg";
@@ -60,6 +71,7 @@ function resetFlow() {
   if (mode === "assign") stepLabel.textContent = "Scan the Case ID tag";
   if (mode === "move") stepLabel.textContent = "Scan the Case ID of the decedent to move";
   if (mode === "release") stepLabel.textContent = "Scan the Case ID to release / mark picked up";
+  if (mode === "checkout") stepLabel.textContent = "Scan the Case ID to check out or check back in";
   scanInput.value = "";
   if (!isSheetIntake) scanInput.focus();
 }
@@ -163,7 +175,13 @@ async function handleCaseScan(rawCode) {
     return;
   }
 
+  const caseData = await postJSON("/api/case/lookup", { case_code: code });
+
   if (mode === "release") {
+    if (caseData.status !== "placed") {
+      showStatus(`${code} is not currently placed, so there's nothing to release.`, false);
+      return;
+    }
     releaseFormTitle.textContent = `Release Case ${code}`;
     releasedTo.value = "";
     releaseForm.classList.remove("hidden");
@@ -171,7 +189,29 @@ async function handleCaseScan(rawCode) {
     return;
   }
 
-  const caseData = await postJSON("/api/case/lookup", { case_code: code });
+  if (mode === "checkout") {
+    if (caseData.status === "placed") {
+      checkoutFormTitle.textContent = `Check Out Case ${code}`;
+      checkoutOrg.value = "";
+      checkoutReason.value = "Autopsy";
+      checkoutForm.classList.remove("hidden");
+      showStatus(`${code} scanned. Enter who it's checked out to.`, true);
+      return;
+    }
+    if (caseData.status === "checked_out") {
+      checkinFormTitle.textContent = `Check In Case ${code}`;
+      const since = caseData.checked_out_at ? caseData.checked_out_at.split(" ")[0] : "";
+      checkinInfo.textContent =
+        `Currently checked out to ${caseData.checkout_org || "?"}` +
+        (caseData.checkout_reason ? ` (${caseData.checkout_reason})` : "") +
+        (since ? ` since ${since}.` : ".");
+      checkinForm.classList.remove("hidden");
+      showStatus(`${code} scanned.`, true);
+      return;
+    }
+    showStatus(`${code} is not currently placed or checked out -- nothing to check out/in.`, false);
+    return;
+  }
 
   if (mode === "assign") {
     if (caseData.status === "placed") {
@@ -180,6 +220,10 @@ async function handleCaseScan(rawCode) {
     }
     if (caseData.status === "released") {
       showStatus(`${code} has already been released/cremated. This tag is no longer active.`, false);
+      return;
+    }
+    if (caseData.status === "checked_out") {
+      showStatus(`${code} is currently checked out. Use Check Out/In mode to bring it back first.`, false);
       return;
     }
     if (caseData.status === "pending_info") {
@@ -214,7 +258,7 @@ async function handleLocationScan(code) {
     showStatus("That doesn't look like a location tag.", false);
     return;
   }
-  if (mode === "assign" || mode === "sheet-intake") {
+  if (mode === "assign" || mode === "sheet-intake" || mode === "checkout") {
     const result = await postJSON("/api/assign", { case_code: currentCaseCode, location_code: code });
     const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
     showStatus(`${currentCaseCode} placed at ${code}.${warning}`, !result.sheet_warning);
@@ -281,6 +325,34 @@ confirmReleaseBtn.addEventListener("click", async () => {
     const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
     showStatus(`${currentCaseCode} released.${warning}`, !result.sheet_warning);
     setTimeout(resetFlow, 1400);
+  } catch (err) {
+    showStatus(err.message, false);
+  }
+});
+
+confirmCheckoutBtn.addEventListener("click", async () => {
+  try {
+    const result = await postJSON("/api/checkout", {
+      case_code: currentCaseCode,
+      organization: checkoutOrg.value,
+      reason: checkoutReason.value,
+    });
+    const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
+    showStatus(`${currentCaseCode} checked out.${warning}`, !result.sheet_warning);
+    setTimeout(resetFlow, 1400);
+  } catch (err) {
+    showStatus(err.message, false);
+  }
+});
+
+confirmCheckinBtn.addEventListener("click", async () => {
+  try {
+    const result = await postJSON("/api/checkin", { case_code: currentCaseCode });
+    const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
+    checkinForm.classList.add("hidden");
+    step = "location";
+    stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}`;
+    showStatus(`${currentCaseCode} checked in.${warning} Scan a slot location.`, !result.sheet_warning);
   } catch (err) {
     showStatus(err.message, false);
   }

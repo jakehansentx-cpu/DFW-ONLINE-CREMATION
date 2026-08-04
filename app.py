@@ -126,10 +126,15 @@ def init_db():
             pickup_date TEXT,
             status TEXT NOT NULL DEFAULT 'pending_info',
                 -- pending_info -> pending_location -> placed -> released
+                -- placed <-> checked_out (temporary custody transfer --
+                -- autopsy, organ/tissue donation -- QR stays active)
             location_id INTEGER REFERENCES locations(id),
             created_at TEXT NOT NULL,
             released_at TEXT,
-            released_to TEXT  -- who/where a released decedent went
+            released_to TEXT,  -- who/where a released decedent went
+            checkout_org TEXT,  -- who a checked-out decedent is currently with
+            checkout_reason TEXT,  -- Autopsy / Organ Donation / Tissue Donation / Other
+            checked_out_at TEXT
         );
 
         CREATE TABLE IF NOT EXISTS moves (
@@ -137,7 +142,7 @@ def init_db():
             case_id INTEGER NOT NULL REFERENCES cases(id),
             from_location_id INTEGER REFERENCES locations(id),
             to_location_id INTEGER REFERENCES locations(id),
-            action TEXT NOT NULL, -- placed / moved / released
+            action TEXT NOT NULL, -- placed / moved / released / checked_out / checked_in
             timestamp TEXT NOT NULL
         );
 
@@ -147,9 +152,12 @@ def init_db():
         );
         """
     )
-    # Migrate DBs created before "screen" / "released_to" existed.
+    # Migrate DBs created before these columns existed.
     _ensure_column(db, "locations", "screen", "TEXT")
     _ensure_column(db, "cases", "released_to", "TEXT")
+    _ensure_column(db, "cases", "checkout_org", "TEXT")
+    _ensure_column(db, "cases", "checkout_reason", "TEXT")
+    _ensure_column(db, "cases", "checked_out_at", "TEXT")
     db.commit()
 
     # Ensure every location in config.py exists in the DB, WITHOUT ever
@@ -338,14 +346,18 @@ def case_detail_page(case_code):
     db = get_db()
     row = get_case_with_location(db, case_code)
     released_date = None
+    checked_out_date = None
     if row is not None and row["status"] == "released" and row["released_at"]:
         released_date = format_date_for_sheet(row["released_at"].split(" ")[0])
+    if row is not None and row["status"] == "checked_out" and row["checked_out_at"]:
+        checked_out_date = format_date_for_sheet(row["checked_out_at"].split(" ")[0])
     return render_template(
         "case_detail.html",
         case=row,
         case_code=case_code,
         loc_text=location_text(row),
         released_date=released_date,
+        checked_out_date=checked_out_date,
     )
 
 
@@ -682,6 +694,101 @@ def api_release():
                 _sheets().backfill_released_to(sheet_row, released_to)
         except Exception as e:
             sheet_warning = f"Released locally, but sheet write failed: {e}"
+
+    resp = dict(ok=True, case_code=case_code)
+    if sheet_warning:
+        resp["sheet_warning"] = sheet_warning
+    return jsonify(**resp)
+
+
+@app.route("/api/checkout", methods=["POST"])
+@login_required
+def api_checkout():
+    """
+    Temporary custody transfer -- autopsy, organ/tissue donation, etc.
+    Unlike Release, the armband QR stays fully active: scanning it again
+    later is how the decedent gets checked back in. Frees the current
+    shelf/slot, same as Release, since the body physically leaves.
+    """
+    data = request.get_json(force=True)
+    case_code = data.get("case_code")
+    org = (data.get("organization") or "").strip()
+    reason = (data.get("reason") or "").strip()
+    db = get_db()
+
+    case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
+    if case is None or case["status"] != "placed":
+        return jsonify(error="Case is not currently placed"), 400
+    if not org:
+        return jsonify(error="Missing organization"), 400
+
+    checked_out_at = now()
+    db.execute(
+        """UPDATE cases
+           SET status = 'checked_out', location_id = NULL,
+               checkout_org = ?, checkout_reason = ?, checked_out_at = ?
+           WHERE id = ?""",
+        (org, reason, checked_out_at, case["id"]),
+    )
+    db.execute(
+        "INSERT INTO moves (case_id, from_location_id, to_location_id, action, timestamp) VALUES (?, ?, NULL, 'checked_out', ?)",
+        (case["id"], case["location_id"], checked_out_at),
+    )
+    db.commit()
+
+    sheet_warning = None
+    if config.GOOGLE_SHEETS_ENABLED:
+        try:
+            sheet_row = _sheets().find_row_for_case(case_code)
+            if sheet_row:
+                summary = f"Checked out to {org}"
+                if reason:
+                    summary += f" ({reason})"
+                summary += f" since {format_date_for_sheet(checked_out_at.split(' ')[0])}"
+                _sheets().backfill_checkout(sheet_row, summary)
+        except Exception as e:
+            sheet_warning = f"Checked out locally, but sheet write failed: {e}"
+
+    resp = dict(ok=True, case_code=case_code)
+    if sheet_warning:
+        resp["sheet_warning"] = sheet_warning
+    return jsonify(**resp)
+
+
+@app.route("/api/checkin", methods=["POST"])
+@login_required
+def api_checkin():
+    """Brings a checked-out decedent back into the system -- ready for a
+    fresh location scan, same as any other not-yet-placed case."""
+    data = request.get_json(force=True)
+    case_code = data.get("case_code")
+    db = get_db()
+
+    case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
+    if case is None or case["status"] != "checked_out":
+        return jsonify(error="Case is not currently checked out"), 400
+
+    db.execute(
+        """UPDATE cases
+           SET status = 'pending_location', checkout_org = NULL,
+               checkout_reason = NULL, checked_out_at = NULL
+           WHERE id = ?""",
+        (case["id"],),
+    )
+    db.execute(
+        "INSERT INTO moves (case_id, from_location_id, to_location_id, action, timestamp) VALUES (?, NULL, NULL, 'checked_in', ?)",
+        (case["id"], now()),
+    )
+    db.commit()
+
+    sheet_warning = None
+    if config.GOOGLE_SHEETS_ENABLED:
+        try:
+            sheet_row = _sheets().find_row_for_case(case_code)
+            if sheet_row:
+                _sheets().backfill_checkout(sheet_row, "")
+        except Exception as e:
+            sheet_warning = f"Checked in locally, but sheet write failed: {e}"
 
     resp = dict(ok=True, case_code=case_code)
     if sheet_warning:

@@ -24,6 +24,7 @@
     <button class="mode-btn" data-mode="assign">Assign (at cooler)</button>
     <button class="mode-btn" data-mode="move">Move</button>
     <button class="mode-btn" data-mode="release">Release / Pickup</button>
+    <button class="mode-btn" data-mode="checkout">Check Out / In (Temp)</button>
   </div>
 
   <div id="pendingBadge" class="pending-badge hidden"></div>
@@ -59,6 +60,26 @@
     <label>Released To</label>
     <input id="releasedTo" type="text" placeholder="Funeral home, transport company, etc.">
     <button id="confirmReleaseBtn" class="primary-btn">Confirm Release</button>
+  </div>
+
+  <div id="checkoutForm" class="info-form hidden">
+    <h3 id="checkoutFormTitle">Check Out Decedent</h3>
+    <label>Organization</label>
+    <input id="checkoutOrg" type="text" placeholder="e.g. County Medical Examiner">
+    <label>Reason</label>
+    <select id="checkoutReason">
+      <option value="Autopsy">Autopsy</option>
+      <option value="Organ Donation">Organ Donation</option>
+      <option value="Tissue Donation">Tissue Donation</option>
+      <option value="Other">Other</option>
+    </select>
+    <button id="confirmCheckoutBtn" class="primary-btn">Confirm Check Out</button>
+  </div>
+
+  <div id="checkinForm" class="info-form hidden">
+    <h3 id="checkinFormTitle">Check In Decedent</h3>
+    <div id="checkinInfo" style="padding:8px 0; color:#aab;"></div>
+    <button id="confirmCheckinBtn" class="primary-btn">Confirm Check In</button>
   </div>
 
   <div class="reset-row">
