@@ -1,5 +1,9 @@
 * { box-sizing: border-box; }
-.hidden { display: none; }
+/* !important: some elements (e.g. printTagLink) also carry an inline
+   display style for when they ARE shown -- inline styles otherwise
+   beat a plain class every time, which would leave "hidden" a no-op
+   on exactly those elements. */
+.hidden { display: none !important; }
 body {
   margin: 0;
   font-family: "Segoe UI", Arial, sans-serif;
