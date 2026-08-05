@@ -48,6 +48,20 @@
         <a class="secondary-btn" href="{{ url_for('case_print_page', case_code=case_code) }}" style="text-decoration:none; display:inline-block;">Print Tag</a>
       </div>
     {% endif %}
+
+    {% if history %}
+      <div class="info-form" style="display:block; margin-top:16px;">
+        <h3 style="margin-top:0;">History</h3>
+        <div class="history-list">
+          {% for h in history %}
+            <div class="history-row">
+              <span class="history-when">{{ h.when }}</span>
+              <span class="history-desc">{{ h.description }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
   </div>
 </body>
 </html>

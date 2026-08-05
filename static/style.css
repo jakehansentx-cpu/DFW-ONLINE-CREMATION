@@ -224,3 +224,12 @@ body {
   background: #333; color: #ccc; border: none; border-radius: 8px;
 }
 .reset-row { margin-top: 20px; }
+
+.history-list { display: flex; flex-direction: column; gap: 8px; }
+.history-row {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 8px 0; border-bottom: 1px solid #263042; font-size: 14px;
+}
+.history-row:last-child { border-bottom: none; }
+.history-when { color: #889; white-space: nowrap; }
+.history-desc { text-align: right; color: #ddd; }

@@ -291,6 +291,57 @@ def location_text(row):
     return f"{row['cooler_name']} - Shelf {row['shelf']}{row['slot'] or ''}"
 
 
+def _move_location_text(cooler, shelf, slot):
+    if cooler is None:
+        return None
+    return f"{cooler} - Shelf {shelf}{slot or ''}"
+
+
+def get_case_history(db, case_id):
+    """Full chronological chain of custody for a case -- every
+    placed/moved/released/checked_out/checked_in action already logged in
+    the moves table, just never surfaced anywhere in the UI until now."""
+    rows = db.execute(
+        """
+        SELECT m.action, m.timestamp,
+               fl.cooler_name AS from_cooler, fl.shelf AS from_shelf, fl.slot AS from_slot,
+               tl.cooler_name AS to_cooler, tl.shelf AS to_shelf, tl.slot AS to_slot
+        FROM moves m
+        LEFT JOIN locations fl ON fl.id = m.from_location_id
+        LEFT JOIN locations tl ON tl.id = m.to_location_id
+        WHERE m.case_id = ?
+        ORDER BY m.timestamp ASC, m.id ASC
+        """,
+        (case_id,),
+    ).fetchall()
+
+    descriptions = {
+        "placed": lambda m: f"Placed at {_move_location_text(m['to_cooler'], m['to_shelf'], m['to_slot'])}",
+        "moved": lambda m: (
+            f"Moved from {_move_location_text(m['from_cooler'], m['from_shelf'], m['from_slot'])} "
+            f"to {_move_location_text(m['to_cooler'], m['to_shelf'], m['to_slot'])}"
+        ),
+        "released": lambda m: f"Released from {_move_location_text(m['from_cooler'], m['from_shelf'], m['from_slot'])}",
+        "checked_out": lambda m: f"Checked out from {_move_location_text(m['from_cooler'], m['from_shelf'], m['from_slot'])}",
+        "checked_in": lambda m: "Checked in",
+    }
+    history = []
+    for m in rows:
+        describe = descriptions.get(m["action"])
+        try:
+            dt = datetime.strptime(m["timestamp"], "%Y-%m-%d %H:%M:%S")
+            when = f"{dt.month}/{dt.day}/{dt.year} {dt.strftime('%I:%M %p').lstrip('0')}"
+        except ValueError:
+            when = m["timestamp"]
+        history.append(
+            {
+                "when": when,
+                "description": describe(m) if describe else m["action"],
+            }
+        )
+    return history
+
+
 def generate_qr_png(data):
     qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=2)
     qr.add_data(data)
@@ -413,6 +464,7 @@ def case_detail_page(case_code):
         released_date = format_date_for_sheet(row["released_at"].split(" ")[0])
     if row is not None and row["status"] == "checked_out" and row["checked_out_at"]:
         checked_out_date = format_date_for_sheet(row["checked_out_at"].split(" ")[0])
+    history = get_case_history(db, row["id"]) if row is not None else []
     return render_template(
         "case_detail.html",
         case=row,
@@ -420,6 +472,7 @@ def case_detail_page(case_code):
         loc_text=location_text(row),
         released_date=released_date,
         checked_out_date=checked_out_date,
+        history=history,
     )
 
 
