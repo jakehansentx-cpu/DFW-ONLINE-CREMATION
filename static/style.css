@@ -51,6 +51,21 @@ body {
   outline: 3px solid #f0b74f; outline-offset: -3px;
 }
 
+.board-search-row { display: flex; gap: 8px; padding: 0 16px 12px; }
+.board-search-input {
+  flex: 1; padding: 10px 14px; font-size: 15px; border-radius: 8px;
+  border: 1px solid #333; background: #0d1116; color: #fff;
+}
+
+.slot-cell.search-highlight {
+  outline: 3px solid #5fd88a; outline-offset: -3px;
+  animation: search-pulse 1s ease-in-out 3;
+}
+@keyframes search-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(95,216,138,.6); }
+  50% { box-shadow: 0 0 0 8px rgba(95,216,138,0); }
+}
+
 .grid {
   padding: 16px;
 }

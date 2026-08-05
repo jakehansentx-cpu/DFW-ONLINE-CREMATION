@@ -112,6 +112,57 @@ async function handleMoveTap(loc, coolerName, shelfNum) {
   }
 }
 
+// ---------------- Board search ----------------
+// Finds a decedent by name or case number across every screen/tab, so
+// staff don't have to know which cooler tab someone is on -- useful when
+// a funeral home calls asking where a specific decedent currently is.
+const boardSearchInput = document.getElementById("boardSearch");
+const boardSearchBtn = document.getElementById("boardSearchBtn");
+const boardSearchStatus = document.getElementById("boardSearchStatus");
+
+function showSearchStatus(text, ok) {
+  boardSearchStatus.textContent = text;
+  boardSearchStatus.className = "move-status" + (ok ? "" : " err");
+  boardSearchStatus.classList.remove("hidden");
+}
+
+function runBoardSearch() {
+  const query = boardSearchInput.value.trim().toLowerCase();
+  if (!query) return;
+
+  const match = latestRows.find(
+    (r) =>
+      r.case_code &&
+      ((r.name && r.name.toLowerCase().includes(query)) || r.case_code.toLowerCase().includes(query))
+  );
+  if (!match) {
+    showSearchStatus(`No occupied shelf matches "${boardSearchInput.value.trim()}".`, false);
+    return;
+  }
+
+  showSearchStatus(`Found ${match.name || match.case_code} — ${match.cooler_name}, Shelf ${match.shelf}${match.slot || ""}.`, true);
+
+  if (match.screen !== currentScreen) {
+    currentScreen = match.screen;
+    boardTabs.querySelectorAll(".board-tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.screen === match.screen));
+  }
+  resetMoveSelection();
+  renderBoard(latestRows);
+
+  requestAnimationFrame(() => {
+    const cell = document.querySelector(`.slot-cell[data-location="${CSS.escape(match.location_code)}"]`);
+    if (!cell) return;
+    cell.scrollIntoView({ behavior: "smooth", block: "center" });
+    cell.classList.add("search-highlight");
+    setTimeout(() => cell.classList.remove("search-highlight"), 3000);
+  });
+}
+
+boardSearchBtn.addEventListener("click", runBoardSearch);
+boardSearchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") runBoardSearch();
+});
+
 function renderBoard(rows) {
   const grid = document.getElementById("grid");
   const byCooler = {};
@@ -200,6 +251,7 @@ function renderBoard(rows) {
               `<div class="home">tap for details</div>`;
           }
           cell.innerHTML = (label ? `<div class="code">${escapeHtml(label)}</div>` : "") + bodyHtml;
+          cell.dataset.location = loc.location_code;
           if (moveMode && moveFromLoc && moveFromLoc.location_code === loc.location_code) {
             cell.classList.add("move-selected");
           }
