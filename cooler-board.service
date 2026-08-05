@@ -5,7 +5,7 @@ After=network.target
 [Service]
 # Adjust these two paths to wherever you actually put this folder.
 WorkingDirectory=/home/pi/cooler_board
-ExecStart=/usr/bin/python3 /home/pi/cooler_board/app.py
+ExecStart=/usr/bin/python3 /home/pi/cooler_board/app.py --https
 Restart=always
 RestartSec=3
 User=pi
