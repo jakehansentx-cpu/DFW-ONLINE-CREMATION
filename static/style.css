@@ -125,6 +125,13 @@ body {
 .detail-card .occupant-block {
   border-top: 1px solid #333; padding-top: 10px; margin-top: 10px;
 }
+.detail-card .case-qr-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.detail-card .case-line { margin: 0; }
+.detail-card .case-qr-thumb {
+  width: 60px; height: 60px; background: #fff; padding: 3px; border-radius: 4px; flex-shrink: 0;
+}
 .detail-card .save-occupant-btn {
   margin-top: 10px; padding: 10px; font-size: 14px; width: 100%;
   background: #2a5d8a; color: #fff; border: none; border-radius: 6px;

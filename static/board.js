@@ -148,7 +148,10 @@ function showDetail(loc, coolerName, shelfNum) {
       .map(
         (o, i) => `
       <div class="occupant-block">
-        <p><b>Case:</b> ${escapeHtml(o.case_code)}</p>
+        <div class="case-qr-row">
+          <p class="case-line"><b>Case:</b> ${escapeHtml(o.case_code)}</p>
+          <img class="case-qr-thumb" src="/case/${encodeURIComponent(o.case_code)}/qr.png" alt="QR code for ${escapeHtml(o.case_code)}">
+        </div>
         <label>Name</label>
         <input type="text" class="edit-name" data-case="${escapeHtml(o.case_code)}" value="${escapeHtml(o.name || "")}">
         <label>Funeral Home</label>
