@@ -180,37 +180,41 @@ async function handleCaseScan(rawCode) {
   }
 
   const caseData = await postJSON("/api/case/lookup", { case_code: code });
+  // Shown alongside the case number wherever a scan result is confirmed,
+  // so staff can visually verify the tag matches the decedent before
+  // proceeding -- the case number alone isn't enough for that check.
+  const nameTag = caseData.name ? ` — ${caseData.name}` : "";
 
   if (mode === "release") {
     if (caseData.status !== "placed") {
       showStatus(`${code} is not currently placed, so there's nothing to release.`, false);
       return;
     }
-    releaseFormTitle.textContent = `Release Case ${code}`;
+    releaseFormTitle.textContent = `Release Case ${code}${nameTag}`;
     releasedTo.value = "";
     releaseForm.classList.remove("hidden");
-    showStatus(`${code} scanned. Enter who it's released to.`, true);
+    showStatus(`${code}${nameTag} scanned. Enter who it's released to.`, true);
     return;
   }
 
   if (mode === "checkout") {
     if (caseData.status === "placed") {
-      checkoutFormTitle.textContent = `Check Out Case ${code}`;
+      checkoutFormTitle.textContent = `Check Out Case ${code}${nameTag}`;
       checkoutOrg.value = "";
       checkoutReason.value = "Autopsy";
       checkoutForm.classList.remove("hidden");
-      showStatus(`${code} scanned. Enter who it's checked out to.`, true);
+      showStatus(`${code}${nameTag} scanned. Enter who it's checked out to.`, true);
       return;
     }
     if (caseData.status === "checked_out") {
-      checkinFormTitle.textContent = `Check In Case ${code}`;
+      checkinFormTitle.textContent = `Check In Case ${code}${nameTag}`;
       const since = caseData.checked_out_at ? caseData.checked_out_at.split(" ")[0] : "";
       checkinInfo.textContent =
         `Currently checked out to ${caseData.checkout_org || "?"}` +
         (caseData.checkout_reason ? ` (${caseData.checkout_reason})` : "") +
         (since ? ` since ${since}.` : ".");
       checkinForm.classList.remove("hidden");
-      showStatus(`${code} scanned.`, true);
+      showStatus(`${code}${nameTag} scanned.`, true);
       return;
     }
     showStatus(`${code} is not currently placed or checked out -- nothing to check out/in.`, false);
@@ -242,8 +246,8 @@ async function handleCaseScan(rawCode) {
     }
     // pending_location
     step = "location";
-    stepLabel.textContent = `Now scan the SLOT location for ${code}`;
-    showStatus(`${code} recognized. Scan a slot location.`, true);
+    stepLabel.textContent = `Now scan the SLOT location for ${code}${nameTag}`;
+    showStatus(`${code}${nameTag} recognized. Scan a slot location.`, true);
   }
 
   if (mode === "move") {
@@ -252,8 +256,8 @@ async function handleCaseScan(rawCode) {
       return;
     }
     step = "location";
-    stepLabel.textContent = `Scan the NEW slot location for ${code}`;
-    showStatus(`${code} found. Scan the new location.`, true);
+    stepLabel.textContent = `Scan the NEW slot location for ${code}${nameTag}`;
+    showStatus(`${code}${nameTag} found. Scan the new location.`, true);
   }
 }
 
