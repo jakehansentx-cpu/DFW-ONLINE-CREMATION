@@ -4,8 +4,13 @@ Google Sheets integration for the call log.
 Column layout (matches your sheet):
     A = case number
     B = date
+    C = time received (first call)
     D = decedent name
     E = funeral home
+    F = removal type
+    G = disposition
+    H = removal by
+    I = night (Yes/No)
     L = cooler location + shelf/slot (written back after Assign/Move)
     M = link to the case's page (has a working QR on it, and a Print
         Tag link) -- NOT a picture in the cell. Google Drive service
@@ -82,6 +87,25 @@ def backfill_intake(row_num, date_str, name, funeral_home):
             {"range": _sheet_range(f"B{row_num}"), "values": [[date_str]]},
             {"range": _sheet_range(f"D{row_num}"), "values": [[name]]},
             {"range": _sheet_range(f"E{row_num}"), "values": [[funeral_home]]},
+        ],
+    }
+    service.spreadsheets().values().batchUpdate(
+        spreadsheetId=config.GOOGLE_SHEET_ID, body=body
+    ).execute()
+
+
+def backfill_removal_details(row_num, time_received, removal_type, disposition, removal_by, night):
+    """Writes time received/removal type/disposition/removal by/night into
+    columns C, F, G, H, I for a given row."""
+    service = _get_service()
+    body = {
+        "valueInputOption": "USER_ENTERED",
+        "data": [
+            {"range": _sheet_range(f"C{row_num}"), "values": [[time_received]]},
+            {"range": _sheet_range(f"F{row_num}"), "values": [[removal_type]]},
+            {"range": _sheet_range(f"G{row_num}"), "values": [[disposition]]},
+            {"range": _sheet_range(f"H{row_num}"), "values": [[removal_by]]},
+            {"range": _sheet_range(f"I{row_num}"), "values": [[night]]},
         ],
     }
     service.spreadsheets().values().batchUpdate(

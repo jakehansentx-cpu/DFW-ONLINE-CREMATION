@@ -159,6 +159,11 @@ def init_db():
     _ensure_column(db, "cases", "checkout_reason", "TEXT")
     _ensure_column(db, "cases", "checked_out_at", "TEXT")
     _ensure_column(db, "locations", "cooler_order", "INTEGER DEFAULT 0")
+    _ensure_column(db, "cases", "time_received", "TEXT")
+    _ensure_column(db, "cases", "removal_type", "TEXT")
+    _ensure_column(db, "cases", "disposition", "TEXT")
+    _ensure_column(db, "cases", "removal_by", "TEXT")
+    _ensure_column(db, "cases", "night", "TEXT")
     db.commit()
 
     # Ensure every location in config.py exists in the DB, WITHOUT ever
@@ -896,6 +901,11 @@ def api_sheet_intake_save():
     name = data.get("name") or ""
     funeral_home = data.get("funeral_home") or ""
     pickup_date = data.get("pickup_date") or ""
+    time_received = data.get("time_received") or ""
+    removal_type = data.get("removal_type") or ""
+    disposition = data.get("disposition") or ""
+    removal_by = data.get("removal_by") or ""
+    night = data.get("night") or ""
 
     if not case_code:
         return jsonify(error="Missing case_code"), 400
@@ -906,8 +916,10 @@ def api_sheet_intake_save():
         return jsonify(error="Unknown case code -- start intake first"), 404
 
     db.execute(
-        "UPDATE cases SET name = ?, funeral_home = ?, pickup_date = ?, status = 'pending_location' WHERE case_code = ?",
-        (name, funeral_home, pickup_date, case_code),
+        """UPDATE cases SET name = ?, funeral_home = ?, pickup_date = ?, status = 'pending_location',
+           time_received = ?, removal_type = ?, disposition = ?, removal_by = ?, night = ?
+           WHERE case_code = ?""",
+        (name, funeral_home, pickup_date, time_received, removal_type, disposition, removal_by, night, case_code),
     )
     db.commit()
 
@@ -919,6 +931,9 @@ def api_sheet_intake_save():
             if sheet_row:
                 _sheets().backfill_intake(
                     sheet_row, format_date_for_sheet(pickup_date), name, funeral_home
+                )
+                _sheets().backfill_removal_details(
+                    sheet_row, time_received, removal_type, disposition, removal_by, night
                 )
                 if not _sheets().row_has_case_link(sheet_row):
                     target_url = request.host_url.rstrip("/") + url_for(

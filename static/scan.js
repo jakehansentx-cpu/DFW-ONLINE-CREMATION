@@ -81,6 +81,17 @@ function resetFlow() {
 }
 resetBtn.addEventListener("click", resetFlow);
 
+function clearInfoForm() {
+  document.getElementById("fName").value = "";
+  document.getElementById("fHome").value = "";
+  document.getElementById("fDate").value = "";
+  document.getElementById("fTimeReceived").value = "";
+  document.getElementById("fRemovalType").value = "";
+  document.getElementById("fDisposition").value = "";
+  document.getElementById("fRemovalBy").value = "";
+  document.getElementById("fNight").checked = false;
+}
+
 startSheetCaseBtn.addEventListener("click", async () => {
   try {
     const result = await postJSON("/api/sheet-intake/start", {}, 25000);
@@ -88,9 +99,7 @@ startSheetCaseBtn.addEventListener("click", async () => {
     currentSheetRow = result.sheet_row;
     infoFormTitle.textContent = `Case ${currentCaseCode} (from sheet, row ${currentSheetRow})`;
     infoForm.classList.remove("hidden");
-    document.getElementById("fName").value = "";
-    document.getElementById("fHome").value = "";
-    document.getElementById("fDate").value = "";
+    clearInfoForm();
     saveInfoBtn.textContent = "Save (writes to sheet + this app)";
     printTagLink.href = `/case/${encodeURIComponent(currentCaseCode)}/print`;
     printTagLink.classList.remove("hidden");
@@ -171,9 +180,7 @@ async function handleCaseScan(rawCode) {
     // with zero signal. Just show the form; Save is what tries to sync.
     infoFormTitle.textContent = `Case ${code}`;
     infoForm.classList.remove("hidden");
-    document.getElementById("fName").value = "";
-    document.getElementById("fHome").value = "";
-    document.getElementById("fDate").value = "";
+    clearInfoForm();
     saveInfoBtn.textContent = "Save (uploads now, or later if no signal)";
     showStatus(`${code} scanned. Fill in what you have.`, true);
     return;
@@ -237,9 +244,7 @@ async function handleCaseScan(rawCode) {
     if (caseData.status === "pending_info") {
       infoFormTitle.textContent = `Case ${code} — Enter Details`;
       infoForm.classList.remove("hidden");
-      document.getElementById("fName").value = "";
-      document.getElementById("fHome").value = "";
-      document.getElementById("fDate").value = "";
+      clearInfoForm();
       saveInfoBtn.textContent = "Save & Continue to Location Scan";
       showStatus(`New case ${code}. Fill in details below.`, true);
       return;
@@ -282,6 +287,11 @@ saveInfoBtn.addEventListener("click", async () => {
     name: document.getElementById("fName").value,
     funeral_home: document.getElementById("fHome").value,
     pickup_date: document.getElementById("fDate").value,
+    time_received: document.getElementById("fTimeReceived").value,
+    removal_type: document.getElementById("fRemovalType").value,
+    disposition: document.getElementById("fDisposition").value,
+    removal_by: document.getElementById("fRemovalBy").value,
+    night: document.getElementById("fNight").checked ? "Yes" : "No",
   };
 
   if (mode === "intake") {
