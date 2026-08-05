@@ -36,11 +36,11 @@ from reportlab.lib.utils import ImageReader
 PUBLIC_HOST = "https://137.119.230.213:5000"
 
 # Measured from the physical armband stock -- see chat photos.
-LABEL_W = 3.5 * inch
+LABEL_W = 3.0 * inch
 LABEL_H = 7.0 * inch
 QR_ZONE_BOTTOM = 4.5 * inch   # QR must sit between 4.5in and 7in up the paddle
 QR_ZONE_TOP = 7.0 * inch
-QR_SIZE = 2.2 * inch
+QR_SIZE = 1.5 * inch
 
 
 def make_qr_image(data, box_size=8):
