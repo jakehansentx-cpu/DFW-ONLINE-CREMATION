@@ -2,6 +2,7 @@ service_account.json
 cert.pem
 key.pem
 location_qr_labels.pdf
+field_tags.pdf
 __pycache__/
 *.pyc
 .venv/
