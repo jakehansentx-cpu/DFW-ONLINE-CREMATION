@@ -32,7 +32,7 @@
 # any device. Change this to something only your team knows -- anyone with
 # this passcode AND network access (LAN or Tailscale) can see decedent
 # names/funeral homes, so treat it like a real password, not a formality.
-ACCESS_PASSCODE = "changeme123"
+ACCESS_PASSCODE = "Metro2026"
 
 # Google Sheets integration for intake. Set GOOGLE_SHEETS_ENABLED to True
 # once you've done the service account setup (see README) and dropped the
