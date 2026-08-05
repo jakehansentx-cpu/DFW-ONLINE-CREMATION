@@ -201,16 +201,16 @@ function normalizeCaseCode(raw) {
 }
 
 async function handleCaseScan(rawCode) {
-  const code = normalizeCaseCode(rawCode);
+  let code = normalizeCaseCode(rawCode);
   if (!code) {
     showStatus("That doesn't look like a Case ID tag.", false);
     return;
   }
-  currentCaseCode = code;
 
   if (mode === "intake") {
     // No server round-trip required here on purpose -- this has to work
     // with zero signal. Just show the form; Save is what tries to sync.
+    currentCaseCode = code;
     infoFormTitle.textContent = `Case ${code}`;
     infoForm.classList.remove("hidden");
     clearInfoForm();
@@ -220,6 +220,13 @@ async function handleCaseScan(rawCode) {
   }
 
   const caseData = await postJSON("/api/case/lookup", { case_code: code });
+  // A pre-printed placeholder field tag (see gen_field_tags.py) gets
+  // claimed against a real, sheet-issued case number the first time it's
+  // scanned -- from then on, everything (including this same physical
+  // tag) refers to that real number, not the placeholder code that was
+  // actually scanned.
+  code = caseData.case_code || code;
+  currentCaseCode = code;
   currentCaseName = caseData.name || null;
   const nameTag = nameSuffix(currentCaseName);
 

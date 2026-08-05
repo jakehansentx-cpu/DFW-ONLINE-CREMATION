@@ -150,6 +150,12 @@ def init_db():
             client_id TEXT PRIMARY KEY,
             created_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS tag_aliases (
+            placeholder_code TEXT UNIQUE NOT NULL,
+            real_case_code TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
         """
     )
     # Migrate DBs created before these columns existed.
@@ -220,6 +226,48 @@ def format_date_for_sheet(iso_date):
         return f"{dt.month}/{dt.day}/{dt.strftime('%y')}"
     except ValueError:
         return iso_date  # unexpected format -- write it through as-is rather than crash
+
+
+def _resolve_field_tag(db, case_code):
+    """Resolves a pre-printed placeholder field tag (case codes starting
+    with config.FIELD_TAG_PREFIX -- see gen_field_tags.py) to its real,
+    sheet-issued case code, claiming one for it on first use if it hasn't
+    been claimed yet. Any other case code is returned unchanged.
+
+    Returns (resolved_code, error). error is None on success, or an
+    (message, http_status) tuple when a claim was needed but couldn't be
+    completed (e.g. the sheet is unreachable) -- resolved_code is None
+    in that case."""
+    alias = db.execute(
+        "SELECT real_case_code FROM tag_aliases WHERE placeholder_code = ?", (case_code,)
+    ).fetchone()
+    if alias:
+        return alias["real_case_code"], None
+
+    if not case_code.startswith(config.FIELD_TAG_PREFIX):
+        return case_code, None
+
+    already_used_directly = db.execute(
+        "SELECT 1 FROM cases WHERE case_code = ?", (case_code,)
+    ).fetchone()
+    if already_used_directly is not None:
+        return case_code, None
+
+    if not config.GOOGLE_SHEETS_ENABLED:
+        return None, ("Can't claim a case number for a field tag -- Google Sheets is disabled", 503)
+    try:
+        _sheet_row, real_case_code = _sheets().find_next_unclaimed_case()
+    except Exception as e:
+        return None, (f"Could not reach the sheet to claim a case number: {e}", 503)
+    if not real_case_code:
+        return None, ("No unclaimed case numbers left in the sheet", 409)
+
+    db.execute(
+        "INSERT INTO tag_aliases (placeholder_code, real_case_code, created_at) VALUES (?, ?, ?)",
+        (case_code, real_case_code, now()),
+    )
+    db.commit()
+    return real_case_code, None
 
 
 def get_case_with_location(db, case_code):
@@ -350,6 +398,14 @@ def case_detail_page(case_code):
     scanned after the fact) doesn't keep exposing live case info.
     """
     db = get_db()
+    # A placeholder field tag opened directly (e.g. a random phone's camera
+    # app, not the scan station) claims a real case number the same way
+    # scanning it at the scan station would. If the claim can't complete
+    # right now (e.g. no signal to the sheet), fall back to the raw code --
+    # worst case this just shows as "not found" until it's tried again.
+    resolved_code, err = _resolve_field_tag(db, case_code)
+    if not err:
+        case_code = resolved_code
     row = get_case_with_location(db, case_code)
     released_date = None
     checked_out_date = None
@@ -500,13 +556,27 @@ def api_board_export():
 @app.route("/api/case/lookup", methods=["POST"])
 @login_required
 def api_case_lookup():
-    """Scan a Case ID tag. Creates the case record if it's brand new."""
+    """Scan a Case ID tag. Creates the case record if it's brand new.
+
+    Pre-printed placeholder field tags (case codes starting with
+    config.FIELD_TAG_PREFIX -- see gen_field_tags.py) are a special case:
+    the physical tag's code is never used as the case's real identity.
+    The first time one is scanned, a real, sequential case number is
+    claimed from the sheet for it and remembered in tag_aliases, so this
+    same physical tag always resolves to that real case from then on.
+    """
     data = request.get_json(force=True)
     case_code = (data.get("case_code") or "").strip()
     if not case_code:
         return jsonify(error="No case code scanned"), 400
 
     db = get_db()
+
+    case_code, err = _resolve_field_tag(db, case_code)
+    if err:
+        message, status = err
+        return jsonify(error=message), status
+
     row = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
     if row is None:
         db.execute(

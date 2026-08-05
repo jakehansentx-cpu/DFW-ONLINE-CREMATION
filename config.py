@@ -34,6 +34,12 @@
 # names/funeral homes, so treat it like a real password, not a formality.
 ACCESS_PASSCODE = "Metro2026"
 
+# Pre-printed placeholder field tags (see gen_field_tags.py) all start with
+# this prefix (e.g. FIELD-001). The first time one is scanned, it gets
+# claimed against a real, sequential case number from the sheet -- see
+# api_case_lookup() in app.py.
+FIELD_TAG_PREFIX = "FIELD-"
+
 # Google Sheets integration for intake. Set GOOGLE_SHEETS_ENABLED to True
 # once you've done the service account setup (see README) and dropped the
 # downloaded JSON key file in this folder.
