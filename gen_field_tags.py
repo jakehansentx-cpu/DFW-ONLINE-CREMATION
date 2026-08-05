@@ -26,7 +26,7 @@ import os
 import io
 import qrcode
 from reportlab.lib.pagesizes import letter
-from reportlab.lib.units import inch
+from reportlab.lib.units import inch, cm
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 
@@ -40,7 +40,7 @@ LABEL_W = 3.0 * inch
 LABEL_H = 7.0 * inch
 QR_ZONE_BOTTOM = 4.5 * inch   # QR must sit between 4.5in and 7in up the paddle
 QR_ZONE_TOP = 7.0 * inch
-QR_SIZE = 1.5 * inch
+QR_SIZE = 2 * cm  # confirmed working size, taped onto the real armband stock
 
 
 def make_qr_image(data, box_size=8):
