@@ -40,7 +40,15 @@ let cameraCooldown = false; // prevents re-firing on the same code every frame
 let mode = "sheet-intake";
 let step = "case";       // case | location
 let currentCaseCode = null;
+let currentCaseName = null;
 let currentSheetRow = null;
+
+// Used wherever a case is referenced in a status/step message, so staff
+// can visually verify they've got the right decedent -- the case number
+// alone isn't enough for that check.
+function nameSuffix(name) {
+  return name ? ` — ${name}` : "";
+}
 
 function setMode(newMode) {
   mode = newMode;
@@ -52,6 +60,7 @@ modeButtons.forEach((b) => b.addEventListener("click", () => setMode(b.dataset.m
 function resetFlow() {
   step = "case";
   currentCaseCode = null;
+  currentCaseName = null;
   currentSheetRow = null;
   infoForm.classList.add("hidden");
   releaseForm.classList.add("hidden");
@@ -187,10 +196,8 @@ async function handleCaseScan(rawCode) {
   }
 
   const caseData = await postJSON("/api/case/lookup", { case_code: code });
-  // Shown alongside the case number wherever a scan result is confirmed,
-  // so staff can visually verify the tag matches the decedent before
-  // proceeding -- the case number alone isn't enough for that check.
-  const nameTag = caseData.name ? ` — ${caseData.name}` : "";
+  currentCaseName = caseData.name || null;
+  const nameTag = nameSuffix(currentCaseName);
 
   if (mode === "release") {
     if (caseData.status !== "placed") {
@@ -306,6 +313,7 @@ saveInfoBtn.addEventListener("click", async () => {
       body.case_code = currentCaseCode;
       body.sheet_row = currentSheetRow;
       const result = await postJSON("/api/sheet-intake/save", body, 25000);
+      currentCaseName = body.name || null;
       infoForm.classList.add("hidden");
       // Switch the UI over to the normal scan input so the location can
       // be scanned right away, same as the Assign flow.
@@ -313,7 +321,7 @@ saveInfoBtn.addEventListener("click", async () => {
       scanInput.classList.remove("hidden");
       scanInput.focus();
       step = "location";
-      stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}`;
+      stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}${nameSuffix(currentCaseName)}`;
       const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
       showStatus(`Saved${warning}. Scan a slot location.`, !result.sheet_warning);
     } catch (err) {
@@ -324,9 +332,10 @@ saveInfoBtn.addEventListener("click", async () => {
 
   try {
     await postJSON(`/api/case/${encodeURIComponent(currentCaseCode)}/info`, body);
+    currentCaseName = body.name || null;
     infoForm.classList.add("hidden");
     step = "location";
-    stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}`;
+    stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}${nameSuffix(currentCaseName)}`;
     showStatus("Saved. Scan a slot location.", true);
     scanInput.focus();
   } catch (err) {
@@ -369,7 +378,7 @@ confirmCheckinBtn.addEventListener("click", async () => {
     const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
     checkinForm.classList.add("hidden");
     step = "location";
-    stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}`;
+    stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}${nameSuffix(currentCaseName)}`;
     showStatus(`${currentCaseCode} checked in.${warning} Scan a slot location.`, !result.sheet_warning);
   } catch (err) {
     showStatus(err.message, false);
