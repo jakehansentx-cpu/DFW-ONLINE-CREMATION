@@ -30,9 +30,86 @@ if (boardTabs) {
     btn.addEventListener("click", () => {
       currentScreen = btn.dataset.screen;
       boardTabs.querySelectorAll(".board-tab-btn").forEach((b) => b.classList.toggle("active", b === btn));
+      resetMoveSelection();
+      if (moveMode) moveStatus.classList.add("hidden");
       renderBoard(latestRows);
     });
   });
+}
+
+// ---------------- Touchscreen tap-to-move ----------------
+// Off by default so tapping a cell still opens the usual view/edit
+// details popup -- toggling this button arms tap-to-move instead: tap an
+// occupied shelf to select it, then tap the destination shelf to move it
+// there (same /api/move the scan station's Move mode uses).
+let moveMode = false;
+let moveFromLoc = null; // { location_code, case_code, name }
+
+const moveModeBtn = document.getElementById("moveModeBtn");
+const moveStatus = document.getElementById("moveStatus");
+
+function showMoveStatus(text, ok) {
+  moveStatus.textContent = text;
+  moveStatus.className = "move-status" + (ok ? "" : " err");
+  moveStatus.classList.remove("hidden");
+}
+
+function resetMoveSelection() {
+  moveFromLoc = null;
+}
+
+moveModeBtn.addEventListener("click", () => {
+  moveMode = !moveMode;
+  moveModeBtn.classList.toggle("active", moveMode);
+  resetMoveSelection();
+  if (moveMode) {
+    showMoveStatus("Move mode on -- tap an occupied shelf to move.", true);
+  } else {
+    moveStatus.classList.add("hidden");
+  }
+  renderBoard(latestRows);
+});
+
+async function handleMoveTap(loc, coolerName, shelfNum) {
+  const where = `${coolerName} — Shelf ${shelfNum}${loc.slot ? loc.slot : ""}`;
+
+  if (!moveFromLoc) {
+    if (loc.occupants.length === 0) {
+      showMoveStatus("That shelf is empty -- tap an occupied one first.", false);
+      return;
+    }
+    if (loc.occupants.length > 1) {
+      showMoveStatus("This location holds multiple decedents -- use the scan station's Move mode for shared locations.", false);
+      return;
+    }
+    const o = loc.occupants[0];
+    moveFromLoc = { location_code: loc.location_code, case_code: o.case_code, name: o.name || o.case_code };
+    showMoveStatus(`${moveFromLoc.name} selected from ${where}. Tap the destination shelf.`, true);
+    renderBoard(latestRows);
+    return;
+  }
+
+  if (loc.location_code === moveFromLoc.location_code) {
+    showMoveStatus("Move cancelled.", true);
+    resetMoveSelection();
+    renderBoard(latestRows);
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/move", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ case_code: moveFromLoc.case_code, location_code: loc.location_code }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Move failed");
+    showMoveStatus(`${moveFromLoc.name} moved to ${where}.`, true);
+    resetMoveSelection();
+    poll();
+  } catch (err) {
+    showMoveStatus(err.message, false);
+  }
 }
 
 function renderBoard(rows) {
@@ -123,7 +200,16 @@ function renderBoard(rows) {
               `<div class="home">tap for details</div>`;
           }
           cell.innerHTML = (label ? `<div class="code">${escapeHtml(label)}</div>` : "") + bodyHtml;
-          cell.addEventListener("click", () => showDetail(loc, cooler.name, shelfNum));
+          if (moveMode && moveFromLoc && moveFromLoc.location_code === loc.location_code) {
+            cell.classList.add("move-selected");
+          }
+          cell.addEventListener("click", () => {
+            if (moveMode) {
+              handleMoveTap(loc, cooler.name, shelfNum);
+            } else {
+              showDetail(loc, cooler.name, shelfNum);
+            }
+          });
           mini.appendChild(cell);
         });
 

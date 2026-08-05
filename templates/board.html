@@ -9,6 +9,7 @@
   <header class="board-header">
     <h1>Cooler Status</h1>
     <div style="display:flex; align-items:center; gap:18px;">
+      <button id="moveModeBtn" class="export-btn">📍 Move</button>
       <a class="export-btn" href="{{ url_for('api_board_export') }}" style="text-decoration:none;">Export CSV</a>
       <div id="clock"></div>
       <a href="/logout" style="color:#889; font-size:13px;">Log out</a>
@@ -20,6 +21,8 @@
     <button class="board-tab-btn{% if loop.first %} active{% endif %}" data-screen="{{ screen }}">{{ screen }}</button>
     {% endfor %}
   </div>
+
+  <div id="moveStatus" class="move-status hidden"></div>
 
   <div id="grid" class="grid"></div>
 
