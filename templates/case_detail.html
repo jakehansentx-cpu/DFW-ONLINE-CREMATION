@@ -15,6 +15,12 @@
   <div class="scan-panel">
     {% if case is none %}
       <div class="status-msg err">No case found for {{ case_code }}.</div>
+    {% elif case.status == "released" and case.released_to == "Cremated" %}
+      <div class="status-msg" style="font-size:18px; line-height:1.6;">
+        <b>Case {{ case_code }} — cremated.</b><br>
+        Cremated{% if released_date %} on {{ released_date }}{% endif %}. Final Disposition.<br>
+        <span style="color:#889; font-size:14px;">This tag is no longer active for placement or tracking.</span>
+      </div>
     {% elif case.status == "released" %}
       <div class="status-msg" style="font-size:18px; line-height:1.6;">
         <b>Case {{ case_code }} — closed.</b><br>

@@ -15,6 +15,7 @@ const releaseForm = document.getElementById("releaseForm");
 const releaseFormTitle = document.getElementById("releaseFormTitle");
 const releasedTo = document.getElementById("releasedTo");
 const confirmReleaseBtn = document.getElementById("confirmReleaseBtn");
+const confirmCrematedBtn = document.getElementById("confirmCrematedBtn");
 const checkoutForm = document.getElementById("checkoutForm");
 const checkoutFormTitle = document.getElementById("checkoutFormTitle");
 const checkoutOrg = document.getElementById("checkoutOrg");
@@ -374,6 +375,20 @@ confirmReleaseBtn.addEventListener("click", async () => {
     });
     const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
     showStatus(`${currentCaseCode} released.${warning}`, !result.sheet_warning);
+    setTimeout(resetFlow, 1400);
+  } catch (err) {
+    showStatus(err.message, false);
+  }
+});
+
+confirmCrematedBtn.addEventListener("click", async () => {
+  try {
+    const result = await postJSON("/api/release", {
+      case_code: currentCaseCode,
+      cremated: true,
+    });
+    const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
+    showStatus(`${currentCaseCode} marked as cremated.${warning}`, !result.sheet_warning);
     setTimeout(resetFlow, 1400);
   } catch (err) {
     showStatus(err.message, false);

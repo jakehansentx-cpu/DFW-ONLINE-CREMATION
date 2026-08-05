@@ -745,7 +745,8 @@ def api_release():
     was released to, both locally and back into the sheet."""
     data = request.get_json(force=True)
     case_code = data.get("case_code")
-    released_to = (data.get("released_to") or "").strip()
+    cremated = bool(data.get("cremated"))
+    released_to = "Cremated" if cremated else (data.get("released_to") or "").strip()
     db = get_db()
 
     case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
@@ -767,7 +768,12 @@ def api_release():
         try:
             sheet_row = _sheets().find_row_for_case(case_code)
             if sheet_row:
-                _sheets().backfill_released_to(sheet_row, released_to)
+                if cremated:
+                    dt = datetime.now()
+                    stamp = f"{dt.month}/{dt.day}/{dt.year} {dt.strftime('%I:%M %p').lstrip('0')}"
+                    _sheets().backfill_cremation(sheet_row, stamp)
+                else:
+                    _sheets().backfill_released_to(sheet_row, released_to)
         except Exception as e:
             sheet_warning = f"Released locally, but sheet write failed: {e}"
 

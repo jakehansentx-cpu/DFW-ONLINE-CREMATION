@@ -11,9 +11,11 @@ Column layout (matches your sheet):
     G = disposition
     H = removal by
     I = night (Yes/No)
+    J = cremation date/time -- filled in by the app when a case is marked
+        Cremated (see backfill_cremation()); otherwise blank
     L = cooler location + shelf/slot (written back after Assign/Move)
-    M = Final Disposition -- filled in manually by staff, this app never
-        writes to it
+    M = Final Disposition -- filled in manually by staff, EXCEPT when a
+        case is marked Cremated, when the app writes "Cremated" here too
     N = link to the case's page (has a working QR on it, and a Print
         Tag link) -- NOT a picture in the cell. Google Drive service
         accounts have no storage quota of their own and there's no
@@ -167,6 +169,23 @@ def backfill_case_link(row_num, case_url):
         range=_sheet_range(f"N{row_num}"),
         valueInputOption="USER_ENTERED",
         body={"values": [[case_url]]},
+    ).execute()
+
+
+def backfill_cremation(row_num, timestamp_str):
+    """Writes "Cremated" into column M (Final Disposition -- otherwise
+    filled in manually by staff, this is the one case where the app
+    writes to it) and the cremation date/time into column J."""
+    service = _get_service()
+    body = {
+        "valueInputOption": "USER_ENTERED",
+        "data": [
+            {"range": _sheet_range(f"M{row_num}"), "values": [["Cremated"]]},
+            {"range": _sheet_range(f"J{row_num}"), "values": [[timestamp_str]]},
+        ],
+    }
+    service.spreadsheets().values().batchUpdate(
+        spreadsheetId=config.GOOGLE_SHEET_ID, body=body
     ).execute()
 
 
