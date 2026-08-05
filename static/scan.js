@@ -9,6 +9,8 @@ const saveInfoBtn = document.getElementById("saveInfoBtn");
 const pendingBadge = document.getElementById("pendingBadge");
 const startSheetCaseBtn = document.getElementById("startSheetCaseBtn");
 const printTagLink = document.getElementById("printTagLink");
+const printGate = document.getElementById("printGate");
+const printGateBtn = document.getElementById("printGateBtn");
 const releaseForm = document.getElementById("releaseForm");
 const releaseFormTitle = document.getElementById("releaseFormTitle");
 const releasedTo = document.getElementById("releasedTo");
@@ -67,6 +69,7 @@ function resetFlow() {
   checkoutForm.classList.add("hidden");
   checkinForm.classList.add("hidden");
   printTagLink.classList.add("hidden");
+  printGate.classList.add("hidden");
   statusMsg.textContent = "";
   statusMsg.className = "status-msg";
   if (typeof stopCamera === "function") stopCamera();
@@ -89,6 +92,27 @@ function resetFlow() {
   scanInput.value = "";
 }
 resetBtn.addEventListener("click", resetFlow);
+
+// After decedent info is saved, the tag has to actually get printed before
+// the flow moves on to placing the decedent -- this screen forces that
+// step to happen instead of leaving it as something easy to forget.
+// Continuing is gated behind the print button's own click handler below,
+// not a separate "Continue" button, so there's only one thing to press.
+function showPrintGate(code, nameTag) {
+  infoForm.classList.add("hidden");
+  printGate.classList.remove("hidden");
+  printGateBtn.href = `/case/${encodeURIComponent(code)}/print`;
+  stepLabel.textContent = `Print the armband tag for ${code}${nameTag}`;
+  showStatus("Saved. Print the armband tag to continue.", true);
+}
+
+printGateBtn.addEventListener("click", () => {
+  printGate.classList.add("hidden");
+  startSheetCaseBtn.classList.add("hidden");
+  step = "location";
+  stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}${nameSuffix(currentCaseName)}`;
+  showStatus("Scan a slot location.", true);
+});
 
 function clearInfoForm() {
   document.getElementById("fName").value = "";
@@ -317,16 +341,9 @@ saveInfoBtn.addEventListener("click", async () => {
       body.sheet_row = currentSheetRow;
       const result = await postJSON("/api/sheet-intake/save", body, 25000);
       currentCaseName = body.name || null;
-      infoForm.classList.add("hidden");
-      // Switch the UI over to the normal scan input so the location can
-      // be scanned right away, same as the Assign flow.
-      startSheetCaseBtn.classList.add("hidden");
-      scanInput.classList.remove("hidden");
-      scanInput.focus();
-      step = "location";
-      stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}${nameSuffix(currentCaseName)}`;
       const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
-      showStatus(`Saved${warning}. Scan a slot location.`, !result.sheet_warning);
+      showPrintGate(currentCaseCode, nameSuffix(currentCaseName));
+      if (warning) showStatus(`Saved${warning}. Print the armband tag to continue.`, false);
     } catch (err) {
       showStatus(err.message, false);
     }
@@ -336,11 +353,7 @@ saveInfoBtn.addEventListener("click", async () => {
   try {
     await postJSON(`/api/case/${encodeURIComponent(currentCaseCode)}/info`, body);
     currentCaseName = body.name || null;
-    infoForm.classList.add("hidden");
-    step = "location";
-    stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}${nameSuffix(currentCaseName)}`;
-    showStatus("Saved. Scan a slot location.", true);
-    scanInput.focus();
+    showPrintGate(currentCaseCode, nameSuffix(currentCaseName));
   } catch (err) {
     showStatus(err.message, false);
   }
