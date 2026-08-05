@@ -235,7 +235,7 @@ async function handleCaseScan(rawCode) {
     return;
   }
 
-  if (mode === "assign") {
+  if (mode === "assign" || mode === "sheet-intake") {
     if (caseData.status === "placed") {
       showStatus(`${code} is already placed. Use Move instead.`, false);
       return;
@@ -256,7 +256,10 @@ async function handleCaseScan(rawCode) {
       showStatus(`New case ${code}. Fill in details below.`, true);
       return;
     }
-    // pending_location
+    // pending_location -- info was already saved (maybe in an earlier
+    // session) but a location was never scanned before the flow got
+    // reset/closed. Re-scanning the same tag here picks right back up
+    // at the location-scan step instead of leaving the case stranded.
     step = "location";
     stepLabel.textContent = `Now scan the SLOT location for ${code}${nameTag}`;
     showStatus(`${code}${nameTag} recognized. Scan a slot location.`, true);
