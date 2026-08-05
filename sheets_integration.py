@@ -12,7 +12,9 @@ Column layout (matches your sheet):
     H = removal by
     I = night (Yes/No)
     L = cooler location + shelf/slot (written back after Assign/Move)
-    M = link to the case's page (has a working QR on it, and a Print
+    M = Final Disposition -- filled in manually by staff, this app never
+        writes to it
+    N = link to the case's page (has a working QR on it, and a Print
         Tag link) -- NOT a picture in the cell. Google Drive service
         accounts have no storage quota of their own and there's no
         practical way around that on a free (non-Workspace) Google
@@ -20,8 +22,8 @@ Column layout (matches your sheet):
         armband tag itself still has a real, scannable QR code either
         way -- this column is just a convenience shortcut from the
         sheet.
-    N = released to -- who/where the decedent was released to
-    O = checkout status -- filled in while a decedent is temporarily
+    O = released to -- who/where the decedent was released to
+    P = checkout status -- filled in while a decedent is temporarily
         checked out (autopsy, organ/tissue donation, etc.), cleared
         back to blank once checked back in
 
@@ -143,13 +145,13 @@ def find_row_for_case(case_number):
 
 
 def row_has_case_link(row_num):
-    """True if column M already has anything in it for this row -- lets
+    """True if column N already has anything in it for this row -- lets
     the caller skip re-writing it on every re-save."""
     service = _get_service()
     result = (
         service.spreadsheets()
         .values()
-        .get(spreadsheetId=config.GOOGLE_SHEET_ID, range=_sheet_range(f"M{row_num}"))
+        .get(spreadsheetId=config.GOOGLE_SHEET_ID, range=_sheet_range(f"N{row_num}"))
         .execute()
     )
     values = result.get("values", [])
@@ -158,35 +160,35 @@ def row_has_case_link(row_num):
 
 def backfill_case_link(row_num, case_url):
     """Writes a clickable link to the case's page (QR + info) into
-    column M."""
+    column N."""
     service = _get_service()
     service.spreadsheets().values().update(
         spreadsheetId=config.GOOGLE_SHEET_ID,
-        range=_sheet_range(f"M{row_num}"),
+        range=_sheet_range(f"N{row_num}"),
         valueInputOption="USER_ENTERED",
         body={"values": [[case_url]]},
     ).execute()
 
 
 def backfill_released_to(row_num, released_to):
-    """Writes who/where a decedent was released to into column N."""
+    """Writes who/where a decedent was released to into column O."""
     service = _get_service()
     service.spreadsheets().values().update(
         spreadsheetId=config.GOOGLE_SHEET_ID,
-        range=_sheet_range(f"N{row_num}"),
+        range=_sheet_range(f"O{row_num}"),
         valueInputOption="USER_ENTERED",
         body={"values": [[released_to]]},
     ).execute()
 
 
 def backfill_checkout(row_num, summary):
-    """Writes the current checkout status into column O -- an empty
+    """Writes the current checkout status into column P -- an empty
     string clears it back to blank once the decedent is checked back
     in."""
     service = _get_service()
     service.spreadsheets().values().update(
         spreadsheetId=config.GOOGLE_SHEET_ID,
-        range=_sheet_range(f"O{row_num}"),
+        range=_sheet_range(f"P{row_num}"),
         valueInputOption="USER_ENTERED",
         body={"values": [[summary]]},
     ).execute()
