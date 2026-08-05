@@ -158,6 +158,7 @@ def init_db():
     _ensure_column(db, "cases", "checkout_org", "TEXT")
     _ensure_column(db, "cases", "checkout_reason", "TEXT")
     _ensure_column(db, "cases", "checked_out_at", "TEXT")
+    _ensure_column(db, "locations", "cooler_order", "INTEGER DEFAULT 0")
     db.commit()
 
     # Ensure every location in config.py exists in the DB, WITHOUT ever
@@ -166,12 +167,12 @@ def init_db():
     # new cooler (like Cremation Staging) to config.py just adds the new
     # rows in place on the next restart; nothing gets wiped or reseeded.
     added = 0
-    for cooler in config.COOLERS:
+    for order, cooler in enumerate(config.COOLERS):
         shared = 1 if cooler.get("shared") else 0
         screen = cooler.get("screen") or cooler["name"]
         db.execute(
-            "UPDATE locations SET cooler_name = ?, shared = ?, screen = ? WHERE cooler_code = ?",
-            (cooler["name"], shared, screen, cooler["code"]),
+            "UPDATE locations SET cooler_name = ?, shared = ?, screen = ?, cooler_order = ? WHERE cooler_code = ?",
+            (cooler["name"], shared, screen, order, cooler["code"]),
         )
         for shelf_num, slots in cooler["shelves"]:
             for slot in slots:
@@ -184,9 +185,9 @@ def init_db():
                 if exists is None:
                     db.execute(
                         """INSERT INTO locations
-                           (code, cooler_name, cooler_code, shelf, slot, shared, screen)
-                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                        (code, cooler["name"], cooler["code"], shelf_num, slot, shared, screen),
+                           (code, cooler_name, cooler_code, shelf, slot, shared, screen, cooler_order)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (code, cooler["name"], cooler["code"], shelf_num, slot, shared, screen, order),
                     )
                     added += 1
     db.commit()
@@ -444,7 +445,7 @@ def api_board():
                l.screen, c.case_code, c.name, c.funeral_home, c.pickup_date, c.status, c.created_at
         FROM locations l
         LEFT JOIN cases c ON c.location_id = l.id AND c.status = 'placed'
-        ORDER BY l.cooler_code, l.shelf, l.slot
+        ORDER BY l.cooler_order, l.shelf, l.slot
         """
     ).fetchall()
     return jsonify([dict(r) for r in rows])
@@ -461,7 +462,7 @@ def api_board_export():
                c.case_code, c.name, c.funeral_home, c.pickup_date
         FROM locations l
         JOIN cases c ON c.location_id = l.id AND c.status = 'placed'
-        ORDER BY l.cooler_code, l.shelf, l.slot
+        ORDER BY l.cooler_order, l.shelf, l.slot
         """
     ).fetchall()
 
