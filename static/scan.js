@@ -25,6 +25,10 @@ const checkinForm = document.getElementById("checkinForm");
 const checkinFormTitle = document.getElementById("checkinFormTitle");
 const checkinInfo = document.getElementById("checkinInfo");
 const confirmCheckinBtn = document.getElementById("confirmCheckinBtn");
+const confirmBox = document.getElementById("confirmBox");
+const confirmMessage = document.getElementById("confirmMessage");
+const confirmYesBtn = document.getElementById("confirmYesBtn");
+const confirmNoBtn = document.getElementById("confirmNoBtn");
 
 // Declared here (not down by the rest of the camera code) because
 // resetFlow() calls stopCamera() on every run, including the very first
@@ -45,6 +49,7 @@ let step = "case";       // case | location
 let currentCaseCode = null;
 let currentCaseName = null;
 let currentSheetRow = null;
+let pendingConfirmAction = null;
 
 // Used wherever a case is referenced in a status/step message, so staff
 // can visually verify they've got the right decedent -- the case number
@@ -52,6 +57,26 @@ let currentSheetRow = null;
 function nameSuffix(name) {
   return name ? ` — ${name}` : "";
 }
+
+// Release and Cremated both permanently deactivate the case's QR code --
+// a misscan there is much costlier than one in Move, so both get a
+// confirmation step before the actual API call fires. Reused for any
+// future action that needs the same "are you sure?" treatment.
+function askConfirm(message, onConfirm) {
+  confirmMessage.textContent = message;
+  pendingConfirmAction = onConfirm;
+  confirmBox.classList.remove("hidden");
+}
+confirmYesBtn.addEventListener("click", () => {
+  confirmBox.classList.add("hidden");
+  const action = pendingConfirmAction;
+  pendingConfirmAction = null;
+  if (action) action();
+});
+confirmNoBtn.addEventListener("click", () => {
+  confirmBox.classList.add("hidden");
+  pendingConfirmAction = null;
+});
 
 function setMode(newMode) {
   mode = newMode;
@@ -71,6 +96,8 @@ function resetFlow() {
   checkinForm.classList.add("hidden");
   printTagLink.classList.add("hidden");
   printGate.classList.add("hidden");
+  confirmBox.classList.add("hidden");
+  pendingConfirmAction = null;
   statusMsg.textContent = "";
   statusMsg.className = "status-msg";
   if (typeof stopCamera === "function") stopCamera();
@@ -367,7 +394,7 @@ saveInfoBtn.addEventListener("click", async () => {
   }
 });
 
-confirmReleaseBtn.addEventListener("click", async () => {
+async function doRelease() {
   try {
     const result = await postJSON("/api/release", {
       case_code: currentCaseCode,
@@ -379,9 +406,9 @@ confirmReleaseBtn.addEventListener("click", async () => {
   } catch (err) {
     showStatus(err.message, false);
   }
-});
+}
 
-confirmCrematedBtn.addEventListener("click", async () => {
+async function doCremate() {
   try {
     const result = await postJSON("/api/release", {
       case_code: currentCaseCode,
@@ -393,6 +420,21 @@ confirmCrematedBtn.addEventListener("click", async () => {
   } catch (err) {
     showStatus(err.message, false);
   }
+}
+
+confirmReleaseBtn.addEventListener("click", () => {
+  const who = releasedTo.value.trim() || "the party entered above";
+  askConfirm(
+    `Release ${currentCaseCode}${nameSuffix(currentCaseName)} to ${who}? This deactivates the tag and can't be undone.`,
+    doRelease
+  );
+});
+
+confirmCrematedBtn.addEventListener("click", () => {
+  askConfirm(
+    `Mark ${currentCaseCode}${nameSuffix(currentCaseName)} as CREMATED (Final Disposition)? This deactivates the tag and can't be undone.`,
+    doCremate
+  );
 });
 
 confirmCheckoutBtn.addEventListener("click", async () => {
