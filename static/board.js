@@ -298,6 +298,10 @@ function showDetail(loc, coolerName, shelfNum) {
         <input type="date" class="edit-date" data-case="${escapeHtml(o.case_code)}" value="${escapeHtml(o.pickup_date || "")}">
         <button class="save-occupant-btn" data-case="${escapeHtml(o.case_code)}" data-index="${i}">Save</button>
         <div class="save-status" data-index="${i}"></div>
+        <div class="move-actions">
+          <button class="move-here-btn" data-case="${escapeHtml(o.case_code)}">📍 Move to New Location</button>
+          <button class="move-staging-btn" data-case="${escapeHtml(o.case_code)}">🔥 Move to Cremation Staging</button>
+        </div>
       </div>`
       )
       .join("");
@@ -335,8 +339,53 @@ function showDetail(loc, coolerName, shelfNum) {
         }
       });
     });
+
+    content.querySelectorAll(".move-here-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const caseCode = btn.dataset.case;
+        const occupant = loc.occupants.find((o) => o.case_code === caseCode);
+        overlay.classList.add("hidden");
+        moveMode = true;
+        moveModeBtn.classList.add("active");
+        moveFromLoc = {
+          location_code: loc.location_code,
+          case_code: caseCode,
+          name: (occupant && occupant.name) || caseCode,
+        };
+        showMoveStatus(`${moveFromLoc.name} selected from ${where}. Tap the destination shelf.`, true);
+        renderBoard(latestRows);
+      });
+    });
+
+    content.querySelectorAll(".move-staging-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const caseCode = btn.dataset.case;
+        btn.disabled = true;
+        try {
+          const res = await fetch("/api/move-to-staging", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ case_code: caseCode }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Move failed");
+          overlay.classList.add("hidden");
+          showMoveStatus(`${occupantNameFor(caseCode, loc)} moved to Cremation Staging (${data.location_code}).`, true);
+          poll();
+        } catch (err) {
+          showMoveStatus(err.message, false);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
   }
   overlay.classList.remove("hidden");
+}
+
+function occupantNameFor(caseCode, loc) {
+  const o = loc.occupants.find((occ) => occ.case_code === caseCode);
+  return (o && o.name) || caseCode;
 }
 document.getElementById("closeDetail").addEventListener("click", () => {
   document.getElementById("detail").classList.add("hidden");

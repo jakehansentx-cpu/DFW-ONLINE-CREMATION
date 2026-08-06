@@ -752,6 +752,20 @@ def api_assign():
     return jsonify(**resp)
 
 
+def _perform_move(case, new_loc, staff):
+    """Shared by /api/move and /api/move-to-staging: relocates an
+    already-placed case to new_loc, logs it, and syncs the sheet."""
+    db = get_db()
+    old_loc_id = case["location_id"]
+    db.execute("UPDATE cases SET location_id = ? WHERE id = ?", (new_loc["id"], case["id"]))
+    db.execute(
+        "INSERT INTO moves (case_id, from_location_id, to_location_id, action, timestamp, staff) VALUES (?, ?, ?, 'moved', ?, ?)",
+        (case["id"], old_loc_id, new_loc["id"], now(), staff),
+    )
+    db.commit()
+    return _backfill_case_location(case["case_code"], new_loc)
+
+
 @app.route("/api/move", methods=["POST"])
 @login_required
 def api_move():
@@ -776,17 +790,47 @@ def api_move():
         if occupied is not None:
             return jsonify(error=f"{location_code} is already occupied by {occupied['case_code']}"), 409
 
-    old_loc_id = case["location_id"]
-    db.execute("UPDATE cases SET location_id = ? WHERE id = ?", (new_loc["id"], case["id"]))
-    db.execute(
-        "INSERT INTO moves (case_id, from_location_id, to_location_id, action, timestamp, staff) VALUES (?, ?, ?, 'moved', ?, ?)",
-        (case["id"], old_loc_id, new_loc["id"], now(), staff),
-    )
-    db.commit()
-
-    sheet_warning = _backfill_case_location(case_code, new_loc)
+    sheet_warning = _perform_move(case, new_loc, staff)
 
     resp = dict(ok=True, case_code=case_code, location_code=location_code)
+    if sheet_warning:
+        resp["sheet_warning"] = sheet_warning
+    return jsonify(**resp)
+
+
+@app.route("/api/move-to-staging", methods=["POST"])
+@login_required
+def api_move_to_staging():
+    """Convenience action: relocates an already-placed case straight to
+    the next open shelf in Cremation Staging (falling back to the
+    overflow Biers area once the main shelves are full), without staff
+    needing to scan/tap a specific destination location."""
+    data = request.get_json(force=True)
+    case_code = data.get("case_code")
+    staff = (data.get("staff") or "").strip()
+    db = get_db()
+
+    case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
+    if case is None or case["status"] != "placed":
+        return jsonify(error="Case is not currently placed; use Assign instead"), 400
+
+    new_loc = db.execute(
+        """
+        SELECT l.* FROM locations l
+        WHERE l.cooler_code IN ('CREM-STAGE', 'CREM-STAGE-BIERS')
+          AND NOT EXISTS (
+              SELECT 1 FROM cases c WHERE c.location_id = l.id AND c.status = 'placed'
+          )
+        ORDER BY CASE l.cooler_code WHEN 'CREM-STAGE' THEN 0 ELSE 1 END, l.shelf, l.slot
+        LIMIT 1
+        """
+    ).fetchone()
+    if new_loc is None:
+        return jsonify(error="No open space in Cremation Staging or the overflow Biers area"), 409
+
+    sheet_warning = _perform_move(case, new_loc, staff)
+
+    resp = dict(ok=True, case_code=case_code, location_code=new_loc["code"])
     if sheet_warning:
         resp["sheet_warning"] = sheet_warning
     return jsonify(**resp)

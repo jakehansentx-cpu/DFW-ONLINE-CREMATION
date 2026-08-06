@@ -170,6 +170,13 @@ body {
 .detail-card .save-status.ok { color: #7fd99a; }
 .detail-card .save-status.err { color: #ff9d9d; }
 
+.detail-card .move-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.detail-card .move-here-btn, .detail-card .move-staging-btn {
+  padding: 10px; font-size: 14px; width: 100%; border: none; border-radius: 6px; color: #fff;
+}
+.detail-card .move-here-btn { background: #333; }
+.detail-card .move-staging-btn { background: #5c2a2a; }
+
 /* ---------------- Scan (tablet) ---------------- */
 .scan-body { padding: 16px; max-width: 520px; margin: 0 auto; }
 .scan-header h1 { font-size: 22px; text-align: center; }
