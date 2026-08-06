@@ -171,6 +171,8 @@ def init_db():
     _ensure_column(db, "cases", "removal_by", "TEXT")
     _ensure_column(db, "cases", "night", "TEXT")
     _ensure_column(db, "moves", "staff", "TEXT")
+    _ensure_column(db, "cases", "release_signed_name", "TEXT")
+    _ensure_column(db, "cases", "release_signature", "TEXT")
     db.commit()
 
     # Ensure every location in config.py exists in the DB, WITHOUT ever
@@ -488,6 +490,40 @@ def case_print_page(case_code):
         case=row,
         case_code=case_code,
         pickup_date=format_date_for_sheet(row["pickup_date"]),
+    )
+
+
+@app.route("/case/<case_code>/release-form")
+@login_required
+def case_release_form_page(case_code):
+    """Printable release / chain-of-custody form: who the decedent was
+    released to, when, from where, who processed it, and the receiving
+    party's printed name + signature."""
+    db = get_db()
+    row = get_case_with_location(db, case_code)
+    if row is None or row["status"] != "released":
+        return jsonify(error="This case hasn't been released"), 404
+
+    released_date = None
+    if row["released_at"]:
+        try:
+            dt = datetime.strptime(row["released_at"], "%Y-%m-%d %H:%M:%S")
+            released_date = f"{dt.month}/{dt.day}/{dt.year} {dt.strftime('%I:%M %p').lstrip('0')}"
+        except ValueError:
+            released_date = row["released_at"]
+
+    staff_row = db.execute(
+        "SELECT staff FROM moves WHERE case_id = ? AND action = 'released' ORDER BY id DESC LIMIT 1",
+        (row["id"],),
+    ).fetchone()
+
+    return render_template(
+        "release_form.html",
+        case=row,
+        case_code=case_code,
+        released_date=released_date,
+        from_location=_move_location_text(row["cooler_name"], row["shelf"], row["slot"]),
+        staff=staff_row["staff"] if staff_row and staff_row["staff"] else None,
     )
 
 
@@ -846,6 +882,8 @@ def api_release():
     cremated = bool(data.get("cremated"))
     released_to = "Cremated" if cremated else (data.get("released_to") or "").strip()
     staff = (data.get("staff") or "").strip()
+    signed_name = (data.get("signed_name") or "").strip()
+    signature = data.get("signature") or None
     db = get_db()
 
     case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
@@ -853,8 +891,9 @@ def api_release():
         return jsonify(error="Case is not currently placed"), 400
 
     db.execute(
-        "UPDATE cases SET status = 'released', released_at = ?, released_to = ? WHERE id = ?",
-        (now(), released_to, case["id"]),
+        """UPDATE cases SET status = 'released', released_at = ?, released_to = ?,
+           release_signed_name = ?, release_signature = ? WHERE id = ?""",
+        (now(), released_to, signed_name, signature, case["id"]),
     )
     db.execute(
         "INSERT INTO moves (case_id, from_location_id, to_location_id, action, timestamp, staff) VALUES (?, ?, NULL, 'released', ?, ?)",

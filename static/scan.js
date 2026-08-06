@@ -16,6 +16,11 @@ const releaseFormTitle = document.getElementById("releaseFormTitle");
 const releasedTo = document.getElementById("releasedTo");
 const confirmReleaseBtn = document.getElementById("confirmReleaseBtn");
 const confirmCrematedBtn = document.getElementById("confirmCrematedBtn");
+const printedName = document.getElementById("printedName");
+const signatureCanvas = document.getElementById("signatureCanvas");
+const clearSignatureBtn = document.getElementById("clearSignatureBtn");
+const releaseReceiptGate = document.getElementById("releaseReceiptGate");
+const releaseReceiptBtn = document.getElementById("releaseReceiptBtn");
 const checkoutForm = document.getElementById("checkoutForm");
 const checkoutFormTitle = document.getElementById("checkoutFormTitle");
 const checkoutOrg = document.getElementById("checkoutOrg");
@@ -42,6 +47,55 @@ if (savedStaff && [...staffSelect.options].some((o) => o.value === savedStaff)) 
 staffSelect.addEventListener("change", () => {
   localStorage.setItem(STAFF_STORAGE_KEY, staffSelect.value);
 });
+
+// Signature capture for the Release form -- drawn on a canvas via
+// Pointer Events so mouse, touch, and stylus all work the same way.
+const sigCtx = signatureCanvas.getContext("2d");
+let sigDrawing = false;
+let sigHasContent = false;
+
+function clearSignature() {
+  sigCtx.fillStyle = "#fff";
+  sigCtx.fillRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+  sigHasContent = false;
+}
+clearSignature();
+
+function sigPos(e) {
+  const rect = signatureCanvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) * (signatureCanvas.width / rect.width),
+    y: (e.clientY - rect.top) * (signatureCanvas.height / rect.height),
+  };
+}
+signatureCanvas.addEventListener("pointerdown", (e) => {
+  sigDrawing = true;
+  sigHasContent = true;
+  const p = sigPos(e);
+  sigCtx.beginPath();
+  sigCtx.moveTo(p.x, p.y);
+  signatureCanvas.setPointerCapture(e.pointerId);
+});
+signatureCanvas.addEventListener("pointermove", (e) => {
+  if (!sigDrawing) return;
+  const p = sigPos(e);
+  sigCtx.strokeStyle = "#000";
+  sigCtx.lineWidth = 2.5;
+  sigCtx.lineCap = "round";
+  sigCtx.lineTo(p.x, p.y);
+  sigCtx.stroke();
+});
+signatureCanvas.addEventListener("pointerup", () => {
+  sigDrawing = false;
+});
+signatureCanvas.addEventListener("pointercancel", () => {
+  sigDrawing = false;
+});
+clearSignatureBtn.addEventListener("click", clearSignature);
+
+function getSignatureDataUrl() {
+  return sigHasContent ? signatureCanvas.toDataURL("image/png") : null;
+}
 
 function getStaffName() {
   return staffSelect.value;
@@ -113,8 +167,11 @@ function resetFlow() {
   checkinForm.classList.add("hidden");
   printTagLink.classList.add("hidden");
   printGate.classList.add("hidden");
+  releaseReceiptGate.classList.add("hidden");
   confirmBox.classList.add("hidden");
   pendingConfirmAction = null;
+  printedName.value = "";
+  clearSignature();
   statusMsg.textContent = "";
   statusMsg.className = "status-msg";
   if (typeof stopCamera === "function") stopCamera();
@@ -425,19 +482,29 @@ saveInfoBtn.addEventListener("click", async () => {
 });
 
 async function doRelease() {
+  const releasedCode = currentCaseCode;
   try {
     const result = await postJSON("/api/release", {
-      case_code: currentCaseCode,
+      case_code: releasedCode,
       released_to: releasedTo.value,
       staff: getStaffName(),
+      signed_name: printedName.value,
+      signature: getSignatureDataUrl(),
     });
     const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
-    showStatus(`${currentCaseCode} released.${warning}`, !result.sheet_warning);
-    setTimeout(resetFlow, 1400);
+    releaseForm.classList.add("hidden");
+    releaseReceiptGate.classList.remove("hidden");
+    releaseReceiptBtn.href = `/case/${encodeURIComponent(releasedCode)}/release-form`;
+    showStatus(`${releasedCode} released.${warning} Print the release form for your records.`, !result.sheet_warning);
   } catch (err) {
     showStatus(err.message, false);
   }
 }
+
+releaseReceiptBtn.addEventListener("click", () => {
+  releaseReceiptGate.classList.add("hidden");
+  resetFlow();
+});
 
 async function doCremate() {
   try {

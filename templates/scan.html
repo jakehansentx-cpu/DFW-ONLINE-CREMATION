@@ -83,8 +83,19 @@
     <h3 id="releaseFormTitle">Release Decedent</h3>
     <label>Released To</label>
     <input id="releasedTo" type="text" placeholder="Funeral home, transport company, etc.">
+    <label>Printed Name (person receiving)</label>
+    <input id="printedName" type="text" placeholder="Print name">
+    <label>Signature</label>
+    <canvas id="signatureCanvas" width="500" height="180" style="width:100%; height:160px; background:#fff; border-radius:6px; touch-action:none; margin-top:4px;"></canvas>
+    <button id="clearSignatureBtn" type="button" class="secondary-btn" style="margin-top:8px;">Clear Signature</button>
     <button id="confirmReleaseBtn" class="primary-btn">Confirm Release</button>
     <button id="confirmCrematedBtn" class="secondary-btn" style="margin-top:10px; background:#5c2a2a; color:#fff;">Mark as Cremated (Final Disposition)</button>
+  </div>
+
+  <div id="releaseReceiptGate" class="info-form hidden" style="text-align:center;">
+    <h3>Release Recorded</h3>
+    <p style="color:#aab; margin-bottom:16px;">Print the release form for your records.</p>
+    <a id="releaseReceiptBtn" style="display:block; text-decoration:none; text-align:center; font-size:22px; padding:26px; background:#2a5d8a; color:#fff; border-radius:10px;" target="_blank" rel="noopener">🖨️ Print Release Form</a>
   </div>
 
   <div id="confirmBox" class="info-form hidden" style="text-align:center;">
