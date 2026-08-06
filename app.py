@@ -787,17 +787,33 @@ def run_sheet_sync(db, base_url):
             cols[1].strip(), cols[2].strip(), cols[3].strip(), cols[4].strip(),
             cols[5].strip(), cols[6].strip(), cols[7].strip(), cols[8].strip(),
         )
-        if not name and not funeral_home and not date_str:
-            continue  # still genuinely unclaimed -- normal intake already handles this case
+        if not (name and funeral_home and date_str):
+            continue  # not fully filled in yet -- wait until name, funeral home, AND date are all there
 
-        existing = db.execute("SELECT 1 FROM cases WHERE case_code = ?", (case_code,)).fetchone()
+        existing = db.execute(
+            "SELECT id, name, funeral_home, pickup_date, status FROM cases WHERE case_code = ?", (case_code,)
+        ).fetchone()
         if existing is not None:
-            # Already tracked locally -- but the column N link may never
-            # have actually been written (e.g. an earlier sync attempt
-            # got interrupted, or the case was created some other way),
-            # so still make sure it's there before moving on. Without
-            # this, a case that's stuck in that state would be silently
-            # skipped forever instead of ever getting fixed.
+            # Already tracked locally -- but it may be a stray blank/
+            # incomplete record (e.g. created under the old rule above,
+            # which only required ONE of name/funeral home/date instead
+            # of all three, or from a tag scanned in the field before any
+            # info was typed in) that the sheet has since caught up to.
+            # Fill it in now rather than leaving it stuck blank forever.
+            if (
+                existing["status"] in ("pending_info", "pending_location")
+                and not (existing["name"] and existing["funeral_home"] and existing["pickup_date"])
+            ):
+                db.execute(
+                    "UPDATE cases SET name = ?, funeral_home = ?, pickup_date = ?, status = 'pending_location' WHERE id = ?",
+                    (name, funeral_home, parse_date_from_sheet(date_str), existing["id"]),
+                )
+                db.commit()
+            # The column N link may also never have actually been written
+            # (e.g. an earlier sync attempt got interrupted), so make
+            # sure that's there too before moving on -- without this, a
+            # case stuck in that state would be skipped forever instead
+            # of ever getting fixed.
             try:
                 if not _sheets().row_has_case_link(sid, row_num):
                     target_url = f"{base_url}/case/{quote(case_code, safe='')}"
