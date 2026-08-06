@@ -30,8 +30,10 @@ if (boardTabs) {
     btn.addEventListener("click", () => {
       currentScreen = btn.dataset.screen;
       boardTabs.querySelectorAll(".board-tab-btn").forEach((b) => b.classList.toggle("active", b === btn));
-      resetMoveSelection();
-      if (moveMode) moveStatus.classList.add("hidden");
+      // Deliberately NOT clearing an in-progress move selection here -- a
+      // decedent selected on one board (e.g. Cremation Staging) needs to
+      // stay selected while switching tabs to tap a destination on a
+      // different board (e.g. Metro Coolers).
       renderBoard(latestRows);
     });
   });
