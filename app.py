@@ -399,6 +399,33 @@ def location_text(row):
     return f"{row['cooler_name']} - Shelf {row['shelf']}{row['slot'] or ''}"
 
 
+def secondary_status_text(row):
+    """Where things currently stand, computed from the case's lifecycle
+    state -- distinct from case.disposition (spreadsheet column G), which
+    is what the funeral home wants done (Cremation, Burial, PU/HOLD,
+    on hold pending authorization, etc.) rather than where things are
+    right now."""
+    if row is None:
+        return None
+    status = row["status"]
+    if status == "released":
+        if row["released_to"] == "Cremated":
+            text = "Cremated"
+            if row["disk_number"]:
+                text += f" — Disk #{row['disk_number']}"
+            return text
+        return f"Released to {row['released_to']}" if row["released_to"] else "Released"
+    if status == "checked_out":
+        text = f"Checked Out to {row['checkout_org'] or '—'}"
+        if row["checkout_reason"]:
+            text += f" ({row['checkout_reason']})"
+        return text
+    if status == "placed":
+        loc = location_text(row)
+        return f"In Cooler at {loc}" if loc else "In Cooler"
+    return "Awaiting Placement"
+
+
 def _move_location_text(cooler, shelf, slot):
     if cooler is None:
         return None
@@ -929,6 +956,7 @@ def case_detail_page(case_code):
         case=row,
         case_code=case_code,
         loc_text=location_text(row),
+        secondary_status=secondary_status_text(row),
         released_date=released_date,
         checked_out_date=checked_out_date,
         history=history,

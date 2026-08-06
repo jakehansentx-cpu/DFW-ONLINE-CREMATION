@@ -15,6 +15,15 @@
   <div class="scan-panel">
     {% if case is none %}
       <div class="status-msg err">No case found for {{ case_code }}.</div>
+    {% else %}
+      <div class="info-form" style="display:block;">
+        <label>Status</label>
+        <div style="padding:8px 0; font-size:18px;">{{ case.disposition or "—" }}</div>
+        <label>Secondary Status</label>
+        <div style="padding:8px 0; font-size:18px;">{{ secondary_status }}</div>
+      </div>
+    {% endif %}
+    {% if case is none %}
     {% elif case.status == "released" and case.released_to == "Cremated" %}
       <div class="status-msg" style="font-size:18px; line-height:1.6;">
         <b>Case {{ case_code }} — cremated.</b><br>
@@ -51,7 +60,7 @@
 
     {% if flags %}
       <div class="info-form" style="display:block; margin-top:16px;">
-        <h3 style="margin-top:0;">Status</h3>
+        <h3 style="margin-top:0;">Status Checklist</h3>
         <div class="history-list">
           {% for f in flags %}
             <div class="history-row">
