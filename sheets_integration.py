@@ -139,6 +139,33 @@ def find_next_unclaimed_case(sheet_id):
     return None, None
 
 
+def read_rows(sheet_id):
+    """Returns (row_num, [A, B, C, D, E, F, G, H, I]) for every row that
+    has a case number in column A -- used by the manual-entry sync to
+    find rows staff typed straight into the sheet (name, date, funeral
+    home, disposition, night, etc.) instead of going through the app.
+    Each row is padded out to 9 columns so index access is always safe
+    even when trailing cells are blank."""
+    service = _get_service()
+    result = (
+        service.spreadsheets()
+        .values()
+        .get(spreadsheetId=sheet_id, range=_sheet_range("A:I"))
+        .execute()
+    )
+    values = result.get("values", [])
+    rows = []
+    for i, row in enumerate(values):
+        row_num = i + 1
+        if row_num == 1:
+            continue  # header row
+        col_a = row[0] if len(row) > 0 else ""
+        if col_a.strip():
+            padded = row + [""] * (9 - len(row))
+            rows.append((row_num, padded[:9]))
+    return rows
+
+
 def backfill_intake(sheet_id, row_num, date_str, name, funeral_home):
     """Writes date/name/funeral home into columns B, D, E for a given row."""
     service = _get_service()

@@ -56,6 +56,16 @@ whichever sheet it was created against, even after you switch. Remember
 to share each new monthly sheet with the service account's email first
 (shown in the error message if you forget).
 
+**Manual spreadsheet entry:** some staff prefer typing name/date/
+funeral home/disposition/night straight into the spreadsheet instead of
+using the scan station -- that's fine, but a decedent only gets an
+armband tag/QR and board tracking once the app knows about them. The
+scan station's "🔄 Sync Manual Entries From Sheet" button picks up any
+row that has a case number and looks filled in but isn't tracked
+locally yet, creates a record for it, and lists a Print Tag link for
+each one found -- run it any time (safe to run repeatedly) and print a
+tag for everything it finds.
+
 ## Setup (one time)
 
 1. Install Python 3.10+ on the host machine.

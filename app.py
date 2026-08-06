@@ -295,6 +295,24 @@ def format_date_for_sheet(iso_date):
         return iso_date  # unexpected format -- write it through as-is rather than crash
 
 
+def parse_date_from_sheet(sheet_date):
+    """Best-effort inverse of format_date_for_sheet -- staff typing a
+    date straight into the sheet (see the manual-entry sync) might write
+    it as 8/6/26 or 8/06/2026 depending on habit, so try both rather than
+    force one exact format. Returns None (not a crash) for anything that
+    doesn't parse, since a messy date cell shouldn't block the rest of
+    a sync."""
+    text = (sheet_date or "").strip()
+    if not text:
+        return None
+    for fmt in ("%m/%d/%y", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(text, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return None
+
+
 def _resolve_field_tag(db, case_code):
     """Resolves a pre-printed placeholder field tag (case codes starting
     with config.FIELD_TAG_PREFIX -- see gen_field_tags.py) to its real,
@@ -554,6 +572,71 @@ def api_set_sheet():
     set_setting(db, "current_sheet_month", datetime.now().strftime("%Y-%m"))
     db.commit()
     return jsonify(ok=True, sheet_id=sheet_id, label=label)
+
+
+@app.route("/api/sheet-sync", methods=["POST"])
+@login_required
+def api_sheet_sync():
+    """
+    Picks up decedents staff typed straight into the spreadsheet instead
+    of going through the app. Some staff prefer entering name/date/
+    funeral home/disposition/night directly in the sheet rather than
+    using the scan station -- that's fine, but a case only gets a local
+    record (and therefore an armband tag/QR and board tracking) once the
+    app knows about it. This scans the current sheet for rows that have
+    a case number AND look filled-in, but have no matching local case
+    yet, creates one for each, and writes the case link back to column N
+    so it behaves exactly like an app-driven intake from here on. Safe
+    to run repeatedly -- already-tracked rows are skipped every time.
+    """
+    if not config.GOOGLE_SHEETS_ENABLED:
+        return jsonify(error="Google Sheets isn't turned on yet (see config.py)"), 400
+
+    db = get_db()
+    sid = current_sheet_id(db)
+    try:
+        rows = _sheets().read_rows(sid)
+    except Exception as e:
+        return jsonify(error=f"Couldn't reach the spreadsheet: {e}"), 502
+
+    synced = []
+    for row_num, cols in rows:
+        case_code = cols[0].strip()
+        date_str, time_received, name, funeral_home, removal_type, disposition, removal_by, night = (
+            cols[1].strip(), cols[2].strip(), cols[3].strip(), cols[4].strip(),
+            cols[5].strip(), cols[6].strip(), cols[7].strip(), cols[8].strip(),
+        )
+        if not name and not funeral_home and not date_str:
+            continue  # still genuinely unclaimed -- normal intake already handles this case
+
+        existing = db.execute("SELECT 1 FROM cases WHERE case_code = ?", (case_code,)).fetchone()
+        if existing is not None:
+            continue  # already tracked locally, whether via the app or an earlier sync
+
+        pickup_date = parse_date_from_sheet(date_str)
+        db.execute(
+            """INSERT INTO cases
+               (case_code, name, funeral_home, pickup_date, status, created_at, sheet_id,
+                time_received, removal_type, disposition, removal_by, night)
+               VALUES (?, ?, ?, ?, 'pending_location', ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                case_code, name or None, funeral_home or None, pickup_date, now(), sid,
+                time_received or None, removal_type or None, disposition or None,
+                removal_by or None, night or None,
+            ),
+        )
+        db.commit()
+
+        try:
+            if not _sheets().row_has_case_link(sid, row_num):
+                target_url = request.host_url.rstrip("/") + url_for("case_detail_page", case_code=case_code)
+                _sheets().backfill_case_link(sid, row_num, target_url)
+        except Exception:
+            pass  # the local record is what matters -- the sheet link is a convenience shortcut
+
+        synced.append({"case_code": case_code, "name": name or None})
+
+    return jsonify(ok=True, synced=synced)
 
 
 @app.route("/case/<case_code>")

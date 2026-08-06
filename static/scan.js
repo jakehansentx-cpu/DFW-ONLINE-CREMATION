@@ -107,6 +107,53 @@ sheetSetBtn.addEventListener("click", async () => {
   }
 })();
 
+// Some staff prefer typing name/date/funeral home/disposition/night
+// straight into the spreadsheet rather than using this app -- that's
+// fine, but a decedent only gets a local record (and therefore an
+// armband tag/QR and board tracking) once the app knows about them.
+// This pulls in anything typed directly into the sheet that isn't
+// tracked locally yet.
+const syncSheetBtn = document.getElementById("syncSheetBtn");
+const syncResults = document.getElementById("syncResults");
+
+function escapeHtmlLocal(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+syncSheetBtn.addEventListener("click", async () => {
+  syncSheetBtn.disabled = true;
+  syncSheetBtn.textContent = "Checking sheet...";
+  try {
+    const result = await postJSON("/api/sheet-sync", {}, 20000);
+    if (result.synced.length === 0) {
+      syncResults.innerHTML = `<p style="color:#aab; margin:0;">No new manual entries found -- everything in the sheet is already tracked.</p>`;
+    } else {
+      const rows = result.synced
+        .map(
+          (c) => `
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid #263042;">
+          <span>${escapeHtmlLocal(c.case_code)}${c.name ? " — " + escapeHtmlLocal(c.name) : ""}</span>
+          <a href="/case/${encodeURIComponent(c.case_code)}/print" target="_blank" rel="noopener" style="color:#5fa8e0; white-space:nowrap;">🖨️ Print Tag</a>
+        </div>`
+        )
+        .join("");
+      syncResults.innerHTML =
+        `<h3 style="margin-top:0;">${result.synced.length} New Decedent${result.synced.length > 1 ? "s" : ""} Found</h3>` +
+        `<p style="color:#aab; font-size:14px;">Print an armband tag for each, then place and scan them in as usual.</p>` +
+        rows;
+    }
+    syncResults.classList.remove("hidden");
+  } catch (err) {
+    syncResults.innerHTML = `<p class="status-msg err" style="margin:0;">${escapeHtmlLocal(err.message)}</p>`;
+    syncResults.classList.remove("hidden");
+  } finally {
+    syncSheetBtn.disabled = false;
+    syncSheetBtn.textContent = "🔄 Sync Manual Entries From Sheet";
+  }
+});
+
 // Signature capture for the Release form -- drawn on a canvas via
 // Pointer Events so mouse, touch, and stylus all work the same way.
 const sigCtx = signatureCanvas.getContext("2d");
