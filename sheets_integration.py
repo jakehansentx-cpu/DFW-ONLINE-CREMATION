@@ -186,17 +186,20 @@ def find_next_unclaimed_case(sheet_id):
 
 
 def read_rows(sheet_id):
-    """Returns (row_num, [A, B, C, D, E, F, G, H, I]) for every row that
-    has a case number in column A -- used by the manual-entry sync to
-    find rows staff typed straight into the sheet (name, date, funeral
-    home, disposition, night, etc.) instead of going through the app.
-    Each row is padded out to 9 columns so index access is always safe
-    even when trailing cells are blank."""
+    """Returns (row_num, [A, B, C, ... N]) for every row that has a case
+    number in column A -- used by the manual-entry sync to find rows
+    staff typed straight into the sheet (name, date, funeral home,
+    disposition, night, etc.) instead of going through the app. Reads
+    through column N (the case link) in the same request so the sync
+    can tell which rows already have a link without a separate API call
+    per row -- checking hundreds of rows one-by-one was slow enough to
+    time out client-side. Each row is padded out to 14 columns so index
+    access is always safe even when trailing cells are blank."""
     service = _get_service()
     result = (
         service.spreadsheets()
         .values()
-        .get(spreadsheetId=sheet_id, range=_sheet_range("A:I"))
+        .get(spreadsheetId=sheet_id, range=_sheet_range("A:N"))
         .execute()
     )
     values = result.get("values", [])
@@ -207,8 +210,8 @@ def read_rows(sheet_id):
             continue  # header row
         col_a = row[0] if len(row) > 0 else ""
         if col_a.strip():
-            padded = row + [""] * (9 - len(row))
-            rows.append((row_num, padded[:9]))
+            padded = row + [""] * (14 - len(row))
+            rows.append((row_num, padded[:14]))
     return rows
 
 

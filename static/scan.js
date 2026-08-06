@@ -137,7 +137,11 @@ syncSheetBtn.addEventListener("click", async () => {
   syncSheetBtn.disabled = true;
   syncSheetBtn.textContent = "Checking sheet...";
   try {
-    const result = await postJSON("/api/sheet-sync", {}, 20000);
+    // Checks every filled-in row against the sheet (not just brand-new
+    // ones) to catch stray/incomplete records too -- as the sheet fills
+    // up over the month this can take a while, so this gets a longer
+    // timeout than the app's other, quicker actions.
+    const result = await postJSON("/api/sheet-sync", {}, 60000);
     if (result.synced.length === 0) {
       syncResults.innerHTML = `<p style="color:#aab; margin:0;">No new manual entries found -- everything in the sheet is already tracked.</p>`;
     } else {
@@ -157,7 +161,11 @@ syncSheetBtn.addEventListener("click", async () => {
     }
     syncResults.classList.remove("hidden");
   } catch (err) {
-    syncResults.innerHTML = `<p class="status-msg err" style="margin:0;">${escapeHtmlLocal(err.message)}</p>`;
+    const timedOut = err.name === "AbortError" || /abort/i.test(err.message);
+    const message = timedOut
+      ? "This is taking longer than usual to check the sheet. It may still finish in the background -- wait a minute, then check column N or try again."
+      : err.message;
+    syncResults.innerHTML = `<p class="status-msg err" style="margin:0;">${escapeHtmlLocal(message)}</p>`;
     syncResults.classList.remove("hidden");
   } finally {
     syncSheetBtn.disabled = false;

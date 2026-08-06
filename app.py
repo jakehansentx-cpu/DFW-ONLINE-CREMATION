@@ -813,13 +813,15 @@ def run_sheet_sync(db, base_url):
             # (e.g. an earlier sync attempt got interrupted), so make
             # sure that's there too before moving on -- without this, a
             # case stuck in that state would be skipped forever instead
-            # of ever getting fixed.
-            try:
-                if not _sheets().row_has_case_link(sid, row_num):
+            # of ever getting fixed. cols[13] (column N) came back in the
+            # same bulk read as everything else, so this is free -- no
+            # extra API call needed just to check.
+            if not cols[13].strip():
+                try:
                     target_url = f"{base_url}/case/{quote(case_code, safe='')}"
                     _sheets().backfill_case_link(sid, row_num, target_url)
-            except Exception:
-                pass
+                except Exception:
+                    pass
             continue
 
         pickup_date = parse_date_from_sheet(date_str)
@@ -836,12 +838,12 @@ def run_sheet_sync(db, base_url):
         )
         db.commit()
 
-        try:
-            if not _sheets().row_has_case_link(sid, row_num):
+        if not cols[13].strip():
+            try:
                 target_url = f"{base_url}/case/{quote(case_code, safe='')}"
                 _sheets().backfill_case_link(sid, row_num, target_url)
-        except Exception:
-            pass  # the local record is what matters -- the sheet link is a convenience shortcut
+            except Exception:
+                pass  # the local record is what matters -- the sheet link is a convenience shortcut
 
         synced.append({"case_code": case_code, "name": name or None})
 
