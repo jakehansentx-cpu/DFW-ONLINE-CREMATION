@@ -507,13 +507,13 @@ def get_inventory_items(db, case_id):
     ]
 
 
-def _stamp_inventory_caption(img, case_code, name):
-    """Burns the case number (and decedent name, if known) into the
-    bottom of an inventory photo -- so the photo is still self-
-    identifying even if it ever leaves the app entirely (copied off the
-    Pi, emailed, printed), not just tagged in the database. Shrinks the
-    caption down (and drops the name first, then truncates it) rather
-    than letting it overflow, for unusually long names/case codes."""
+def _stamp_inventory_caption(img, case_code, name, timestamp):
+    """Burns the case number, decedent name (if known), and date/time
+    into the bottom of an inventory photo -- so the photo is still
+    self-identifying even if it ever leaves the app entirely (copied off
+    the Pi, emailed, printed), not just tagged in the database. Shrinks
+    the case/name line down (and drops the name first, then truncates
+    it) rather than letting it overflow, for unusually long names."""
     draw = ImageDraw.Draw(img)
     font_size = max(16, img.width // 40)
     max_width = img.width - 16
@@ -525,8 +525,8 @@ def _stamp_inventory_caption(img, case_code, name):
         return f"Case: {case_code}"
 
     font = _load_font(True, font_size)
-    caption = build(True, None)
-    if draw.textbbox((0, 0), caption, font=font)[2] > max_width:
+    case_line = build(True, None)
+    if draw.textbbox((0, 0), case_line, font=font)[2] > max_width:
         # Try progressively shorter versions of the name before dropping
         # it entirely -- always keeping the case number intact, since
         # that's the one piece that must never be cut off.
@@ -536,17 +536,27 @@ def _stamp_inventory_caption(img, case_code, name):
             if draw.textbbox((0, 0), candidate, font=font)[2] <= max_width:
                 fit = candidate
                 break
-        caption = fit or build(False, None)
+        case_line = fit or build(False, None)
+
+    when_line = _format_when(timestamp)
 
     padding = 8
-    text_bbox = draw.textbbox((0, 0), caption, font=font)
-    bar_h = (text_bbox[3] - text_bbox[1]) + padding * 2
+    line_gap = 4
+    case_bbox = draw.textbbox((0, 0), case_line, font=font)
+    when_bbox = draw.textbbox((0, 0), when_line, font=font)
+    case_h = case_bbox[3] - case_bbox[1]
+    when_h = when_bbox[3] - when_bbox[1]
+    bar_h = padding * 2 + case_h + line_gap + when_h
+
     draw.rectangle([0, img.height - bar_h, img.width, img.height], fill=(0, 0, 0))
-    draw.text((padding, img.height - bar_h + padding - text_bbox[1]), caption, font=font, fill=(255, 255, 255))
+    y = img.height - bar_h + padding
+    draw.text((padding, y - when_bbox[1]), when_line, font=font, fill=(255, 255, 255))
+    y += when_h + line_gap
+    draw.text((padding, y - case_bbox[1]), case_line, font=font, fill=(255, 255, 255))
     return img
 
 
-def _save_inventory_photo(file_storage, case_code, name):
+def _save_inventory_photo(file_storage, case_code, name, timestamp):
     """Resizes/re-encodes an uploaded inventory photo to a reasonable
     size before saving -- a raw phone camera photo can be several MB,
     which adds up fast across many items on a Pi's limited storage.
@@ -562,7 +572,7 @@ def _save_inventory_photo(file_storage, case_code, name):
         return None, "That doesn't look like a photo the app can read -- try again."
 
     img.thumbnail((1600, 1600))
-    img = _stamp_inventory_caption(img, case_code, name)
+    img = _stamp_inventory_caption(img, case_code, name, timestamp)
     filename = f"{secrets.token_hex(12)}.jpg"
     img.save(INVENTORY_PHOTOS_PATH / filename, format="JPEG", quality=82)
     return filename, None
@@ -944,16 +954,17 @@ def api_add_inventory(case_code):
     if not description and not (photo and photo.filename):
         return jsonify(error="Enter a description or attach a photo"), 400
 
+    timestamp = now()
     photo_filename = None
     if photo and photo.filename:
-        photo_filename, err = _save_inventory_photo(photo, case_code, case["name"])
+        photo_filename, err = _save_inventory_photo(photo, case_code, case["name"], timestamp)
         if err:
             return jsonify(error=err), 400
 
     db.execute(
         "INSERT INTO inventory_items (case_id, description, photo_filename, created_at, staff) "
         "VALUES (?, ?, ?, ?, ?)",
-        (case["id"], description or None, photo_filename, now(), staff),
+        (case["id"], description or None, photo_filename, timestamp, staff),
     )
     db.commit()
 

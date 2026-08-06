@@ -254,9 +254,10 @@ case's own `/case/<code>` page. Photos are saved to
 database, and served through a login-gated route rather than as plain
 static files.
 
-Each photo also has the case number and decedent's name burned directly
-into the bottom of the image itself (not just tagged in the database),
-so it stays self-identifying even if a copy ever leaves the app.
+Each photo also has the date/time, case number, and decedent's name
+burned directly into the bottom of the image itself (not just tagged
+in the database), so it stays self-identifying even if a copy ever
+leaves the app.
 
 ## Layout config: coolers and shelves
 
