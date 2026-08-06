@@ -16,6 +16,10 @@ const releaseFormTitle = document.getElementById("releaseFormTitle");
 const releasedTo = document.getElementById("releasedTo");
 const confirmReleaseBtn = document.getElementById("confirmReleaseBtn");
 const confirmCrematedBtn = document.getElementById("confirmCrematedBtn");
+const cremateForm = document.getElementById("cremateForm");
+const cremateFormTitle = document.getElementById("cremateFormTitle");
+const diskNumber = document.getElementById("diskNumber");
+const confirmCremateBtn = document.getElementById("confirmCremateBtn");
 const printedName = document.getElementById("printedName");
 const signatureCanvas = document.getElementById("signatureCanvas");
 const clearSignatureBtn = document.getElementById("clearSignatureBtn");
@@ -163,6 +167,7 @@ function resetFlow() {
   currentSheetRow = null;
   infoForm.classList.add("hidden");
   releaseForm.classList.add("hidden");
+  cremateForm.classList.add("hidden");
   checkoutForm.classList.add("hidden");
   checkinForm.classList.add("hidden");
   printTagLink.classList.add("hidden");
@@ -171,6 +176,7 @@ function resetFlow() {
   confirmBox.classList.add("hidden");
   pendingConfirmAction = null;
   printedName.value = "";
+  diskNumber.value = "";
   clearSignature();
   statusMsg.textContent = "";
   statusMsg.className = "status-msg";
@@ -350,10 +356,10 @@ async function handleCaseScan(rawCode) {
       showStatus(`${code} is not currently placed, so there's nothing to cremate.`, false);
       return;
     }
-    askConfirm(
-      `Mark ${code}${nameTag} as CREMATED (Final Disposition)? This deactivates the tag and can't be undone.`,
-      doCremate
-    );
+    cremateFormTitle.textContent = `Cremate Case ${code}${nameTag}`;
+    diskNumber.value = "";
+    cremateForm.classList.remove("hidden");
+    showStatus(`${code}${nameTag} scanned. Enter the disk number.`, true);
     return;
   }
 
@@ -512,6 +518,7 @@ async function doCremate() {
       case_code: currentCaseCode,
       cremated: true,
       staff: getStaffName(),
+      disk_number: diskNumber.value.trim(),
     });
     const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
     showStatus(`${currentCaseCode} marked as cremated.${warning}`, !result.sheet_warning);
@@ -530,6 +537,14 @@ confirmReleaseBtn.addEventListener("click", () => {
 });
 
 confirmCrematedBtn.addEventListener("click", () => {
+  releaseForm.classList.add("hidden");
+  cremateFormTitle.textContent = `Cremate Case ${currentCaseCode}${nameSuffix(currentCaseName)}`;
+  diskNumber.value = "";
+  cremateForm.classList.remove("hidden");
+  showStatus(`${currentCaseCode}${nameSuffix(currentCaseName)} — enter the disk number.`, true);
+});
+
+confirmCremateBtn.addEventListener("click", () => {
   askConfirm(
     `Mark ${currentCaseCode}${nameSuffix(currentCaseName)} as CREMATED (Final Disposition)? This deactivates the tag and can't be undone.`,
     doCremate

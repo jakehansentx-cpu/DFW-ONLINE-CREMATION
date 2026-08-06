@@ -13,6 +13,8 @@ Column layout (matches your sheet):
     I = night (Yes/No)
     J = cremation date/time -- filled in by the app when a case is marked
         Cremated (see backfill_cremation()); otherwise blank
+    K = cremation disk number -- filled in by the app alongside J when a
+        case is marked Cremated; otherwise blank
     L = cooler location + shelf/slot (written back after Assign/Move)
     M = Final Disposition -- the app writes here on both Release
         ("Released to <facility/funeral home/org>") and Cremated
@@ -173,18 +175,19 @@ def backfill_case_link(row_num, case_url):
     ).execute()
 
 
-def backfill_cremation(row_num, timestamp_str):
+def backfill_cremation(row_num, timestamp_str, disk_number=None):
     """Writes "Cremated" into column M (Final Disposition -- otherwise
     filled in manually by staff, this is the one case where the app
-    writes to it) and the cremation date/time into column J."""
+    writes to it), the cremation date/time into column J, and the
+    cremation disk number (if given) into column K."""
     service = _get_service()
-    body = {
-        "valueInputOption": "USER_ENTERED",
-        "data": [
-            {"range": _sheet_range(f"M{row_num}"), "values": [["Cremated"]]},
-            {"range": _sheet_range(f"J{row_num}"), "values": [[timestamp_str]]},
-        ],
-    }
+    data = [
+        {"range": _sheet_range(f"M{row_num}"), "values": [["Cremated"]]},
+        {"range": _sheet_range(f"J{row_num}"), "values": [[timestamp_str]]},
+    ]
+    if disk_number:
+        data.append({"range": _sheet_range(f"K{row_num}"), "values": [[disk_number]]})
+    body = {"valueInputOption": "USER_ENTERED", "data": data}
     service.spreadsheets().values().batchUpdate(
         spreadsheetId=config.GOOGLE_SHEET_ID, body=body
     ).execute()

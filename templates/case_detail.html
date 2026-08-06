@@ -18,7 +18,7 @@
     {% elif case.status == "released" and case.released_to == "Cremated" %}
       <div class="status-msg" style="font-size:18px; line-height:1.6;">
         <b>Case {{ case_code }} — cremated.</b><br>
-        Cremated{% if released_date %} on {{ released_date }}{% endif %}. Final Disposition.<br>
+        Cremated{% if released_date %} on {{ released_date }}{% endif %}{% if case.disk_number %} — Disk #{{ case.disk_number }}{% endif %}. Final Disposition.<br>
         <span style="color:#889; font-size:14px;">This tag is no longer active for placement or tracking.</span>
       </div>
     {% elif case.status == "released" %}

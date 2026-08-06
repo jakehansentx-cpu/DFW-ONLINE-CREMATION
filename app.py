@@ -173,6 +173,8 @@ def init_db():
     _ensure_column(db, "moves", "staff", "TEXT")
     _ensure_column(db, "cases", "release_signed_name", "TEXT")
     _ensure_column(db, "cases", "release_signature", "TEXT")
+    _ensure_column(db, "cases", "disk_number", "TEXT")
+    _ensure_column(db, "moves", "disk_number", "TEXT")
     db.commit()
 
     # Ensure every location in config.py exists in the DB, WITHOUT ever
@@ -306,7 +308,7 @@ def get_case_history(db, case_id):
     the moves table, just never surfaced anywhere in the UI until now."""
     rows = db.execute(
         """
-        SELECT m.action, m.timestamp, m.staff,
+        SELECT m.action, m.timestamp, m.staff, m.disk_number,
                fl.cooler_name AS from_cooler, fl.shelf AS from_shelf, fl.slot AS from_slot,
                tl.cooler_name AS to_cooler, tl.shelf AS to_shelf, tl.slot AS to_slot
         FROM moves m
@@ -318,13 +320,19 @@ def get_case_history(db, case_id):
         (case_id,),
     ).fetchall()
 
+    def _describe_released(m):
+        from_text = _move_location_text(m["from_cooler"], m["from_shelf"], m["from_slot"])
+        if m["disk_number"]:
+            return f"Cremated from {from_text} — Disk #{m['disk_number']}"
+        return f"Released from {from_text}"
+
     descriptions = {
         "placed": lambda m: f"Placed at {_move_location_text(m['to_cooler'], m['to_shelf'], m['to_slot'])}",
         "moved": lambda m: (
             f"Moved from {_move_location_text(m['from_cooler'], m['from_shelf'], m['from_slot'])} "
             f"to {_move_location_text(m['to_cooler'], m['to_shelf'], m['to_slot'])}"
         ),
-        "released": lambda m: f"Released from {_move_location_text(m['from_cooler'], m['from_shelf'], m['from_slot'])}",
+        "released": _describe_released,
         "checked_out": lambda m: f"Checked out from {_move_location_text(m['from_cooler'], m['from_shelf'], m['from_slot'])}",
         "checked_in": lambda m: "Checked in",
     }
@@ -884,6 +892,7 @@ def api_release():
     staff = (data.get("staff") or "").strip()
     signed_name = (data.get("signed_name") or "").strip()
     signature = data.get("signature") or None
+    disk_number = (data.get("disk_number") or "").strip() if cremated else None
     db = get_db()
 
     case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
@@ -892,12 +901,12 @@ def api_release():
 
     db.execute(
         """UPDATE cases SET status = 'released', released_at = ?, released_to = ?,
-           release_signed_name = ?, release_signature = ? WHERE id = ?""",
-        (now(), released_to, signed_name, signature, case["id"]),
+           release_signed_name = ?, release_signature = ?, disk_number = ? WHERE id = ?""",
+        (now(), released_to, signed_name, signature, disk_number, case["id"]),
     )
     db.execute(
-        "INSERT INTO moves (case_id, from_location_id, to_location_id, action, timestamp, staff) VALUES (?, ?, NULL, 'released', ?, ?)",
-        (case["id"], case["location_id"], now(), staff),
+        "INSERT INTO moves (case_id, from_location_id, to_location_id, action, timestamp, staff, disk_number) VALUES (?, ?, NULL, 'released', ?, ?, ?)",
+        (case["id"], case["location_id"], now(), staff, disk_number),
     )
     db.commit()
 
@@ -909,7 +918,7 @@ def api_release():
                 if cremated:
                     dt = datetime.now()
                     stamp = f"{dt.month}/{dt.day}/{dt.year} {dt.strftime('%I:%M %p').lstrip('0')}"
-                    _sheets().backfill_cremation(sheet_row, stamp)
+                    _sheets().backfill_cremation(sheet_row, stamp, disk_number)
                 else:
                     _sheets().backfill_released_to(sheet_row, released_to)
         except Exception as e:
