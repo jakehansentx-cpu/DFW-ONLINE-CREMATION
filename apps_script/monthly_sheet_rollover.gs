@@ -12,18 +12,20 @@
  * app (sheets_integration.py / app.py).
  *
  * ---------------------------------------------------------------
- * ONE-TIME SETUP
+ * ONE-TIME SETUP -- no coding needed, just fill in constants and
+ * pick two function names from a dropdown.
  * ---------------------------------------------------------------
- * 1. Fill in the three constants right below this comment block.
+ * 1. Fill in the constants right below this comment block.
  * 2. Open Extensions -> Apps Script from any Google Sheet, paste this
- *    whole file in, and save.
- * 3. Run bootstrapPreviousSheetId() ONCE, with the ID of whichever
- *    sheet is CURRENTLY active (this month's), so the script knows
- *    where to read the last case number from the first time it runs.
+ *    whole file in (replacing whatever's there), and save.
+ * 3. From the function dropdown at the top of the editor (next to the
+ *    Run/Debug buttons), select bootstrapPreviousSheetId and click Run.
  *    Google will ask you to authorize the script the first time you
- *    run anything -- that's expected, approve it.
- * 4. Run installMonthlyTrigger() ONCE. This sets up the schedule and
- *    never needs to be run again.
+ *    run anything -- that's expected, approve it. This reads
+ *    CURRENT_SHEET_ID (below) and remembers it as "the sheet to read
+ *    the last case number from" -- only needs to run once, ever.
+ * 4. Select installMonthlyTrigger from the same dropdown and click Run.
+ *    This sets up the schedule and never needs to be run again.
  * That's it -- from here on, a new sheet gets created, numbered, and
  * shared automatically at the start of every month, with no further
  * action from you.
@@ -36,14 +38,15 @@
  */
 
 const SERVICE_ACCOUNT_EMAIL = "PASTE-YOUR-SERVICE-ACCOUNT-EMAIL-HERE@your-project.iam.gserviceaccount.com";
-const TEMPLATE_SHEET_ID = "PASTE-A-TEMPLATE-SPREADSHEET-ID-HERE"; // headers already set up, columns A-P
+const TEMPLATE_SHEET_ID = "PASTE-A-TEMPLATE-SPREADSHEET-ID-HERE"; // headers already set up, columns A-P, no data rows
+const CURRENT_SHEET_ID = "PASTE-THIS-MONTHS-CURRENTLY-ACTIVE-SHEET-ID-HERE"; // only used once, by bootstrapPreviousSheetId()
 const DEST_FOLDER_ID = ""; // optional -- leave blank to create in "My Drive" root
 const ROWS_TO_PRENUMBER = 300;
-const NOTIFY_EMAIL = ""; // optional -- leave blank to skip the confirmation email
+const NOTIFY_EMAIL = ""; // optional -- your own email, for a confirmation each month
 
-function bootstrapPreviousSheetId(sheetId) {
-  PropertiesService.getScriptProperties().setProperty("PREVIOUS_SHEET_ID", sheetId);
-  Logger.log("Previous sheet ID set to: " + sheetId);
+function bootstrapPreviousSheetId() {
+  PropertiesService.getScriptProperties().setProperty("PREVIOUS_SHEET_ID", CURRENT_SHEET_ID);
+  Logger.log("Previous sheet ID set to: " + CURRENT_SHEET_ID);
 }
 
 function installMonthlyTrigger() {
@@ -67,7 +70,7 @@ function createNextMonthSheet() {
     const previousSheetId = props.getProperty("PREVIOUS_SHEET_ID");
     if (!previousSheetId) {
       throw new Error(
-        "PREVIOUS_SHEET_ID isn't set -- run bootstrapPreviousSheetId('<id>') once first."
+        "PREVIOUS_SHEET_ID isn't set -- run bootstrapPreviousSheetId once first."
       );
     }
 
