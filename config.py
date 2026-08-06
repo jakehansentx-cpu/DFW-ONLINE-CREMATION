@@ -90,6 +90,15 @@ PUBLIC_HOST = "https://metro-body-storage.tail8ed927.ts.net"
 # to press it.
 SHEET_SYNC_INTERVAL_MINUTES = 5
 
+# A blank field tag (see gen_field_tags.py) claims a real case number the
+# moment it's scanned -- but claiming never writes anything back to the
+# sheet itself, so if that claim is then never actually used (no name,
+# funeral home, or pickup date ever entered), the same background job
+# gives the case number back after this many minutes of sitting blank.
+# The physical tag just claims a fresh number the next time it's
+# actually scanned.
+RELEASE_STALE_CLAIMS_AFTER_MINUTES = 60
+
 COOLERS = [
     {
         "name": "Metro Large Cooler",

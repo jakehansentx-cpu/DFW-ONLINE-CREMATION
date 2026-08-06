@@ -17,7 +17,7 @@ import sqlite3
 import secrets
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
 from urllib.parse import quote
@@ -376,6 +376,45 @@ def _resolve_field_tag(db, case_code):
     )
     db.commit()
     return real_case_code, None
+
+
+def release_stale_field_claims(db):
+    """Gives back a real case number that got claimed by scanning a blank
+    field tag (see _resolve_field_tag above) but was then never actually
+    used -- no name, funeral home, or pickup date ever entered. Claiming
+    never writes anything back to the sheet itself (find_next_unclaimed_case
+    only reads it), so releasing is just deleting the local record of the
+    claim -- the sheet naturally offers that same case number up again next
+    time anything asks for the next unclaimed one, and the physical tag
+    (still showing the same FIELD-### code) claims a fresh number the next
+    time it's actually scanned.
+
+    Returns the list of placeholder codes released."""
+    cutoff = (
+        datetime.now() - timedelta(minutes=config.RELEASE_STALE_CLAIMS_AFTER_MINUTES)
+    ).strftime("%Y-%m-%d %H:%M:%S")
+    stale = db.execute(
+        """
+        SELECT ta.placeholder_code, ta.real_case_code
+        FROM tag_aliases ta
+        LEFT JOIN cases c ON c.case_code = ta.real_case_code
+        WHERE ta.created_at < ?
+          AND (
+                c.id IS NULL
+                OR (c.status = 'pending_info' AND c.name IS NULL AND c.funeral_home IS NULL AND c.pickup_date IS NULL)
+              )
+        """,
+        (cutoff,),
+    ).fetchall()
+
+    released = []
+    for row in stale:
+        db.execute("DELETE FROM cases WHERE case_code = ?", (row["real_case_code"],))
+        db.execute("DELETE FROM tag_aliases WHERE placeholder_code = ?", (row["placeholder_code"],))
+        released.append(row["placeholder_code"])
+    if released:
+        db.commit()
+    return released
 
 
 def get_case_with_location(db, case_code):
@@ -908,9 +947,12 @@ def _background_sync_loop():
     """Runs run_sheet_sync automatically every
     config.SHEET_SYNC_INTERVAL_MINUTES, so a decedent typed straight into
     the sheet gets an armband tag/QR/board tracking within a few minutes
-    even if nobody remembers to press the Sync button. Own thread, own
-    DB connection -- Flask's request-scoped get_db() isn't usable outside
-    an actual request."""
+    even if nobody remembers to press the Sync button -- and, in the same
+    cycle, releases any blank field-tag claims that have sat unused past
+    config.RELEASE_STALE_CLAIMS_AFTER_MINUTES (see
+    release_stale_field_claims above). Own thread, own DB connection --
+    Flask's request-scoped get_db() isn't usable outside an actual
+    request."""
     while True:
         time.sleep(config.SHEET_SYNC_INTERVAL_MINUTES * 60)
         if not config.GOOGLE_SHEETS_ENABLED:
@@ -918,6 +960,10 @@ def _background_sync_loop():
         try:
             db = sqlite3.connect(DB_PATH)
             db.row_factory = sqlite3.Row
+            released = release_stale_field_claims(db)
+            if released:
+                codes = ", ".join(released)
+                print(f"[auto-sync] released {len(released)} stale field-tag claim(s): {codes}")
             synced = run_sheet_sync(db, config.PUBLIC_HOST)
             db.close()
             if synced:
