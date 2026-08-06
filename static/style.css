@@ -146,7 +146,7 @@ body {
   background: none; border: none; color: #f2f2f2; font-size: 24px; cursor: pointer;
 }
 .detail-card label { display: block; margin-top: 10px; font-size: 13px; color: #aab; }
-.detail-card input {
+.detail-card input, .detail-card select {
   width: 100%; font-size: 16px; padding: 8px; margin-top: 4px;
   border-radius: 6px; border: 1px solid #333; background: #0d1116; color: #fff;
 }
@@ -159,8 +159,8 @@ body {
 }
 .detail-card .case-line { margin: 0; text-align: center; }
 .detail-card .case-qr-thumb {
-  width: 240px; height: 240px; max-width: 100%;
-  background: #fff; padding: 10px; border-radius: 8px; flex-shrink: 0;
+  width: 140px; height: 140px; max-width: 100%;
+  background: #fff; padding: 8px; border-radius: 8px; flex-shrink: 0;
 }
 .detail-card .save-occupant-btn {
   margin-top: 10px; padding: 10px; font-size: 14px; width: 100%;
@@ -176,6 +176,45 @@ body {
 }
 .detail-card .move-here-btn { background: #333; }
 .detail-card .move-staging-btn { background: #5c2a2a; }
+
+.detail-card .release-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.detail-card .release-btn, .detail-card .checkout-btn {
+  padding: 10px; font-size: 14px; width: 100%; border: none; border-radius: 6px; color: #fff;
+}
+.detail-card .release-btn { background: #5c2a2a; }
+.detail-card .checkout-btn { background: #3a4a5c; }
+.detail-card .sig-canvas {
+  width: 100%; height: 120px; background: #fff; border-radius: 6px;
+  touch-action: none; margin-top: 4px; display: block;
+}
+.detail-card .release-form-inline, .detail-card .checkout-form-inline { margin-top: 10px; }
+.detail-card .release-form-inline.hidden, .detail-card .checkout-form-inline.hidden { display: none; }
+.detail-card .release-form-inline .primary-btn,
+.detail-card .checkout-form-inline .primary-btn { margin-top: 12px; }
+.detail-card .release-form-inline .secondary-btn,
+.detail-card .checkout-form-inline .secondary-btn { margin-top: 8px; }
+
+.checked-out-panel { margin: 0 16px 16px; background: #1a1f26; border: 1px solid #333; border-radius: 8px; padding: 12px 16px; }
+.checked-out-panel.hidden { display: none; }
+.checked-out-title { font-weight: bold; color: #f0b74f; margin-bottom: 8px; }
+.checked-out-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid #263042; }
+.checked-out-row:last-child { border-bottom: none; }
+.checked-out-info { font-size: 14px; }
+.checked-out-meta { font-size: 12.5px; color: #9aa; }
+.checked-out-row .checkin-btn {
+  padding: 8px 14px; font-size: 13px; background: #2a5d8a; color: #fff;
+  border: none; border-radius: 6px; white-space: nowrap;
+}
+
+.board-confirm-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.7);
+  display: flex; align-items: center; justify-content: center; z-index: 30;
+}
+.board-confirm-overlay.hidden { display: none; }
+.board-confirm-card {
+  background: #1a1f26; border: 2px solid #444; border-radius: 10px;
+  padding: 24px 32px; max-width: 380px; text-align: center; font-size: 16px; line-height: 1.5;
+}
 
 /* ---------------- Scan (tablet) ---------------- */
 .scan-body { padding: 16px; max-width: 520px; margin: 0 auto; }

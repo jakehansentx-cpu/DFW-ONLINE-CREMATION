@@ -16,6 +16,16 @@
     </div>
   </header>
 
+  <div class="staff-row">
+    <label for="staffSelect">Who's working?</label>
+    <select id="staffSelect">
+      <option value="">-- Select your name --</option>
+      {% for name in staff_names %}
+      <option value="{{ name }}">{{ name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
   <div id="boardTabs" class="board-tabs">
     {% for screen in screens %}
     <button class="board-tab-btn{% if loop.first %} active{% endif %}" data-screen="{{ screen }}">{{ screen }}</button>
@@ -29,6 +39,14 @@
   <div id="boardSearchStatus" class="move-status hidden"></div>
 
   <div id="moveStatus" class="move-status hidden"></div>
+  <div id="releaseReceiptRow" class="hidden" style="margin: 0 16px 12px;">
+    <a id="releaseReceiptLink" class="export-btn" target="_blank" rel="noopener" style="text-decoration:none; display:inline-block;">🖨️ Print Release Form</a>
+  </div>
+
+  <div id="checkedOutPanel" class="checked-out-panel hidden">
+    <div class="checked-out-title">Currently Checked Out</div>
+    <div id="checkedOutList"></div>
+  </div>
 
   <div id="grid" class="grid"></div>
 
@@ -36,6 +54,14 @@
     <div class="detail-card">
       <button id="closeDetail" class="close-btn">&times;</button>
       <div id="detailContent"></div>
+    </div>
+  </div>
+
+  <div id="boardConfirm" class="board-confirm-overlay hidden">
+    <div class="board-confirm-card">
+      <p id="boardConfirmMessage"></p>
+      <button id="boardConfirmYesBtn" class="primary-btn">Yes, Confirm</button>
+      <button id="boardConfirmNoBtn" class="secondary-btn">Cancel</button>
     </div>
   </div>
 

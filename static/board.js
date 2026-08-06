@@ -22,6 +22,48 @@ function formatDate(datetimeStr) {
 let latestRows = [];
 let currentScreen = null;
 
+// "Who's working?" -- shared with the scan station via the same
+// localStorage key, so picking a name once on either page carries over.
+const STAFF_STORAGE_KEY = "cooler_staff_name";
+const staffSelect = document.getElementById("staffSelect");
+const savedStaff = localStorage.getItem(STAFF_STORAGE_KEY);
+if (savedStaff && [...staffSelect.options].some((o) => o.value === savedStaff)) {
+  staffSelect.value = savedStaff;
+}
+staffSelect.addEventListener("change", () => {
+  localStorage.setItem(STAFF_STORAGE_KEY, staffSelect.value);
+});
+function getStaffName() {
+  return staffSelect.value;
+}
+
+// Shared "are you sure?" gate for Release, same treatment it gets on the
+// scan station -- it permanently deactivates the tag, so a misclick here
+// is much costlier than one on Move or Check Out.
+const boardConfirm = document.getElementById("boardConfirm");
+const boardConfirmMessage = document.getElementById("boardConfirmMessage");
+const boardConfirmYesBtn = document.getElementById("boardConfirmYesBtn");
+const boardConfirmNoBtn = document.getElementById("boardConfirmNoBtn");
+let pendingBoardConfirm = null;
+function askBoardConfirm(message, onConfirm) {
+  boardConfirmMessage.textContent = message;
+  pendingBoardConfirm = onConfirm;
+  boardConfirm.classList.remove("hidden");
+}
+boardConfirmYesBtn.addEventListener("click", () => {
+  boardConfirm.classList.add("hidden");
+  const action = pendingBoardConfirm;
+  pendingBoardConfirm = null;
+  if (action) action();
+});
+boardConfirmNoBtn.addEventListener("click", () => {
+  boardConfirm.classList.add("hidden");
+  pendingBoardConfirm = null;
+});
+
+const releaseReceiptRow = document.getElementById("releaseReceiptRow");
+const releaseReceiptLink = document.getElementById("releaseReceiptLink");
+
 const boardTabs = document.getElementById("boardTabs");
 if (boardTabs) {
   const firstTab = boardTabs.querySelector(".board-tab-btn");
@@ -91,7 +133,13 @@ async function handleMoveTap(loc, coolerName, shelfNum) {
     return;
   }
 
-  if (loc.location_code === moveFromLoc.location_code) {
+  // A null location_code means this selection came from Check In (see
+  // checkedOutList below), not from tapping an occupied shelf -- there's
+  // no source shelf to free, so this is a first placement (/api/assign),
+  // not a move, and there's no "tap the same cell to cancel" shelf either.
+  const isPlacement = !moveFromLoc.location_code;
+
+  if (!isPlacement && loc.location_code === moveFromLoc.location_code) {
     showMoveStatus("Move cancelled.", true);
     resetMoveSelection();
     renderBoard(latestRows);
@@ -99,14 +147,14 @@ async function handleMoveTap(loc, coolerName, shelfNum) {
   }
 
   try {
-    const res = await fetch("/api/move", {
+    const res = await fetch(isPlacement ? "/api/assign" : "/api/move", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ case_code: moveFromLoc.case_code, location_code: loc.location_code }),
+      body: JSON.stringify({ case_code: moveFromLoc.case_code, location_code: loc.location_code, staff: getStaffName() }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Move failed");
-    showMoveStatus(`${moveFromLoc.name} moved to ${where}.`, true);
+    showMoveStatus(`${moveFromLoc.name} ${isPlacement ? "placed" : "moved"} at ${where}.`, true);
     resetMoveSelection();
     poll();
   } catch (err) {
@@ -304,6 +352,36 @@ function showDetail(loc, coolerName, shelfNum) {
           <button class="move-here-btn" data-case="${escapeHtml(o.case_code)}">📍 Move to New Location</button>
           <button class="move-staging-btn" data-case="${escapeHtml(o.case_code)}">🔥 Move to Cremation Staging</button>
         </div>
+        <div class="release-actions" data-case="${escapeHtml(o.case_code)}">
+          <button class="release-btn" data-case="${escapeHtml(o.case_code)}">📤 Release</button>
+          <button class="checkout-btn" data-case="${escapeHtml(o.case_code)}">📦 Check Out</button>
+        </div>
+        <div class="release-form-inline hidden" data-case="${escapeHtml(o.case_code)}">
+          <label>Released To</label>
+          <input type="text" class="release-to-input" data-case="${escapeHtml(o.case_code)}" placeholder="Funeral home, transport company, etc.">
+          <label>Printed Name (person receiving)</label>
+          <input type="text" class="release-name-input" data-case="${escapeHtml(o.case_code)}" placeholder="Print name">
+          <label>Signature</label>
+          <canvas class="sig-canvas" data-case="${escapeHtml(o.case_code)}" width="500" height="150"></canvas>
+          <button type="button" class="clear-sig-btn secondary-btn" data-case="${escapeHtml(o.case_code)}">Clear Signature</button>
+          <button class="confirm-release-btn primary-btn" data-case="${escapeHtml(o.case_code)}">Confirm Release</button>
+          <button class="cancel-release-btn secondary-btn" data-case="${escapeHtml(o.case_code)}">Cancel</button>
+        </div>
+        <div class="checkout-form-inline hidden" data-case="${escapeHtml(o.case_code)}">
+          <label>Organization</label>
+          <input type="text" class="checkout-org-input" data-case="${escapeHtml(o.case_code)}" placeholder="e.g. County Medical Examiner">
+          <label>Reason</label>
+          <select class="checkout-reason-select" data-case="${escapeHtml(o.case_code)}">
+            <option value="Autopsy">Autopsy</option>
+            <option value="Organ Donation">Organ Donation</option>
+            <option value="Tissue Donation">Tissue Donation</option>
+            <option value="Funeral Service">Funeral Service</option>
+            <option value="ID Viewing">ID Viewing</option>
+            <option value="Other">Other</option>
+          </select>
+          <button class="confirm-checkout-btn primary-btn" data-case="${escapeHtml(o.case_code)}">Confirm Check Out</button>
+          <button class="cancel-checkout-btn secondary-btn" data-case="${escapeHtml(o.case_code)}">Cancel</button>
+        </div>
       </div>`
       )
       .join("");
@@ -367,12 +445,152 @@ function showDetail(loc, coolerName, shelfNum) {
           const res = await fetch("/api/move-to-staging", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ case_code: caseCode }),
+            body: JSON.stringify({ case_code: caseCode, staff: getStaffName() }),
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || "Move failed");
           overlay.classList.add("hidden");
           showMoveStatus(`${occupantNameFor(caseCode, loc)} moved to Cremation Staging (${data.location_code}).`, true);
+          poll();
+        } catch (err) {
+          showMoveStatus(err.message, false);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+
+    // Signature capture for each occupant's release form -- same Pointer
+    // Events approach as the scan station, just one canvas per occupant
+    // instead of a single global one, so a shared location with multiple
+    // occupants doesn't have them clobber each other.
+    content.querySelectorAll(".sig-canvas").forEach((canvas) => {
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      canvas._hasContent = false;
+      let drawing = false;
+      function pos(e) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: (e.clientX - rect.left) * (canvas.width / rect.width),
+          y: (e.clientY - rect.top) * (canvas.height / rect.height),
+        };
+      }
+      canvas.addEventListener("pointerdown", (e) => {
+        drawing = true;
+        canvas._hasContent = true;
+        const p = pos(e);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        canvas.setPointerCapture(e.pointerId);
+      });
+      canvas.addEventListener("pointermove", (e) => {
+        if (!drawing) return;
+        const p = pos(e);
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = "round";
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      });
+      canvas.addEventListener("pointerup", () => { drawing = false; });
+      canvas.addEventListener("pointercancel", () => { drawing = false; });
+    });
+
+    content.querySelectorAll(".clear-sig-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const canvas = content.querySelector(`.sig-canvas[data-case="${CSS.escape(btn.dataset.case)}"]`);
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        canvas._hasContent = false;
+      });
+    });
+
+    content.querySelectorAll(".release-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const caseCode = btn.dataset.case;
+        content.querySelector(`.release-actions[data-case="${CSS.escape(caseCode)}"]`).classList.add("hidden");
+        content.querySelector(`.release-form-inline[data-case="${CSS.escape(caseCode)}"]`).classList.remove("hidden");
+      });
+    });
+
+    content.querySelectorAll(".checkout-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const caseCode = btn.dataset.case;
+        content.querySelector(`.release-actions[data-case="${CSS.escape(caseCode)}"]`).classList.add("hidden");
+        content.querySelector(`.checkout-form-inline[data-case="${CSS.escape(caseCode)}"]`).classList.remove("hidden");
+      });
+    });
+
+    content.querySelectorAll(".cancel-release-btn, .cancel-checkout-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const caseCode = btn.dataset.case;
+        content.querySelector(`.release-form-inline[data-case="${CSS.escape(caseCode)}"]`).classList.add("hidden");
+        content.querySelector(`.checkout-form-inline[data-case="${CSS.escape(caseCode)}"]`).classList.add("hidden");
+        content.querySelector(`.release-actions[data-case="${CSS.escape(caseCode)}"]`).classList.remove("hidden");
+      });
+    });
+
+    content.querySelectorAll(".confirm-release-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const caseCode = btn.dataset.case;
+        const name = occupantNameFor(caseCode, loc);
+        const releasedTo = content.querySelector(`.release-to-input[data-case="${CSS.escape(caseCode)}"]`).value.trim();
+        const signedName = content.querySelector(`.release-name-input[data-case="${CSS.escape(caseCode)}"]`).value.trim();
+        const canvas = content.querySelector(`.sig-canvas[data-case="${CSS.escape(caseCode)}"]`);
+        const signature = canvas._hasContent ? canvas.toDataURL("image/png") : null;
+        const who = releasedTo || "the party entered above";
+        askBoardConfirm(
+          `Release ${name} to ${who}? This deactivates the tag and can't be undone.`,
+          async () => {
+            try {
+              const res = await fetch("/api/release", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  case_code: caseCode,
+                  released_to: releasedTo,
+                  staff: getStaffName(),
+                  signed_name: signedName,
+                  signature,
+                }),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error || "Release failed");
+              overlay.classList.add("hidden");
+              const warning = data.sheet_warning ? ` (${data.sheet_warning})` : "";
+              showMoveStatus(`${name} released.${warning}`, !data.sheet_warning);
+              releaseReceiptLink.href = `/case/${encodeURIComponent(caseCode)}/release-form`;
+              releaseReceiptRow.classList.remove("hidden");
+              poll();
+            } catch (err) {
+              showMoveStatus(err.message, false);
+            }
+          }
+        );
+      });
+    });
+
+    content.querySelectorAll(".confirm-checkout-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const caseCode = btn.dataset.case;
+        const name = occupantNameFor(caseCode, loc);
+        const org = content.querySelector(`.checkout-org-input[data-case="${CSS.escape(caseCode)}"]`).value.trim();
+        const reason = content.querySelector(`.checkout-reason-select[data-case="${CSS.escape(caseCode)}"]`).value;
+        btn.disabled = true;
+        try {
+          const res = await fetch("/api/checkout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ case_code: caseCode, organization: org, reason, staff: getStaffName() }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Check out failed");
+          overlay.classList.add("hidden");
+          const warning = data.sheet_warning ? ` (${data.sheet_warning})` : "";
+          showMoveStatus(`${name} checked out.${warning}`, !data.sheet_warning);
           poll();
         } catch (err) {
           showMoveStatus(err.message, false);
@@ -393,6 +611,76 @@ document.getElementById("closeDetail").addEventListener("click", () => {
   document.getElementById("detail").classList.add("hidden");
 });
 
+// ---------------- Checked-out list / Check In ----------------
+// Checked-out decedents hold no shelf/slot, so they never appear in the
+// grid above -- this is their only presence on the board until they're
+// checked back in.
+const checkedOutPanel = document.getElementById("checkedOutPanel");
+const checkedOutList = document.getElementById("checkedOutList");
+
+function renderCheckedOut(rows) {
+  if (rows.length === 0) {
+    checkedOutPanel.classList.add("hidden");
+    checkedOutList.innerHTML = "";
+    return;
+  }
+  checkedOutPanel.classList.remove("hidden");
+  checkedOutList.innerHTML = rows
+    .map((r) => {
+      const since = r.checked_out_at ? formatDate(r.checked_out_at) : "";
+      const meta = `${escapeHtml(r.checkout_org || "?")}${r.checkout_reason ? ` (${escapeHtml(r.checkout_reason)})` : ""}${since ? ` since ${since}` : ""}`;
+      return `
+        <div class="checked-out-row">
+          <div class="checked-out-info">
+            <b>${escapeHtml(r.name || r.case_code)}</b> — ${escapeHtml(r.case_code)}<br>
+            <span class="checked-out-meta">${meta}</span>
+          </div>
+          <button class="checkin-btn" data-case="${escapeHtml(r.case_code)}" data-name="${escapeHtml(r.name || r.case_code)}">📥 Check In</button>
+        </div>`;
+    })
+    .join("");
+
+  checkedOutList.querySelectorAll(".checkin-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const caseCode = btn.dataset.case;
+      const name = btn.dataset.name;
+      btn.disabled = true;
+      try {
+        const res = await fetch("/api/checkin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ case_code: caseCode, staff: getStaffName() }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Check in failed");
+        // No shelf to free/select a "from" -- the next shelf tapped is
+        // where this decedent gets placed (see the isPlacement branch in
+        // handleMoveTap), same as a first Assign.
+        moveMode = true;
+        moveModeBtn.classList.add("active");
+        moveFromLoc = { location_code: null, case_code: caseCode, name };
+        showMoveStatus(`${name} checked in. Tap a shelf to place.`, true);
+        pollCheckedOut();
+        renderBoard(latestRows);
+      } catch (err) {
+        showMoveStatus(err.message, false);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+async function pollCheckedOut() {
+  try {
+    const res = await fetch("/api/checked-out");
+    const rows = await res.json();
+    renderCheckedOut(rows);
+  } catch (e) {
+    console.error("checked-out poll failed", e);
+  }
+}
+
 async function poll() {
   try {
     const res = await fetch("/api/board");
@@ -402,6 +690,7 @@ async function poll() {
   } catch (e) {
     console.error("board poll failed", e);
   }
+  pollCheckedOut();
 }
 poll();
 setInterval(poll, 3000);

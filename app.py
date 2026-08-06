@@ -428,13 +428,13 @@ def generate_label_image(case_code, name, funeral_home, pickup_date, target_url)
 @app.route("/")
 @login_required
 def index():
-    return render_template("board.html", screens=config.BOARD_SCREENS)
+    return render_template("board.html", screens=config.BOARD_SCREENS, staff_names=config.STAFF_NAMES)
 
 
 @app.route("/board")
 @login_required
 def board_page():
-    return render_template("board.html", screens=config.BOARD_SCREENS)
+    return render_template("board.html", screens=config.BOARD_SCREENS, staff_names=config.STAFF_NAMES)
 
 
 @app.route("/scan")
@@ -604,6 +604,20 @@ def api_board():
         LEFT JOIN cases c ON c.location_id = l.id AND c.status = 'placed'
         ORDER BY l.cooler_order, l.shelf, l.slot
         """
+    ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/checked-out")
+@login_required
+def api_checked_out():
+    """Decedents currently checked out (temporary custody transfer) --
+    these hold no shelf/slot, so they never show up on the board grid
+    itself. Listed separately so a Check In has somewhere to start from."""
+    db = get_db()
+    rows = db.execute(
+        """SELECT case_code, name, funeral_home, checkout_org, checkout_reason, checked_out_at
+           FROM cases WHERE status = 'checked_out' ORDER BY checked_out_at ASC"""
     ).fetchall()
     return jsonify([dict(r) for r in rows])
 
