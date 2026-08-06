@@ -133,6 +133,7 @@ function resetFlow() {
   if (mode === "assign") stepLabel.textContent = "Scan the Case ID tag";
   if (mode === "move") stepLabel.textContent = "Scan the Case ID of the decedent to move";
   if (mode === "release") stepLabel.textContent = "Scan the Case ID to release / mark picked up";
+  if (mode === "cremate") stepLabel.textContent = "Scan the armband QR to confirm cremation";
   if (mode === "checkout") stepLabel.textContent = "Scan the Case ID to check out or check back in";
   scanInput.value = "";
 }
@@ -284,6 +285,18 @@ async function handleCaseScan(rawCode) {
     releasedTo.value = "";
     releaseForm.classList.remove("hidden");
     showStatus(`${code}${nameTag} scanned. Enter who it's released to.`, true);
+    return;
+  }
+
+  if (mode === "cremate") {
+    if (caseData.status !== "placed") {
+      showStatus(`${code} is not currently placed, so there's nothing to cremate.`, false);
+      return;
+    }
+    askConfirm(
+      `Mark ${code}${nameTag} as CREMATED (Final Disposition)? This deactivates the tag and can't be undone.`,
+      doCremate
+    );
     return;
   }
 
