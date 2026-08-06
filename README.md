@@ -46,6 +46,16 @@ the info was already saved locally, the app tells you so but does NOT
 lose the local save -- the sheet is a convenience mirror, not the
 system of record for what's happening in your coolers right now.
 
+**Monthly spreadsheet rollover:** since a new call log spreadsheet gets
+generated every month, the scan station has a "🗂️ This Month's
+Spreadsheet" button (top of the page) for switching to it -- paste the
+new sheet's link and save. It auto-expands and flags itself once the
+calendar month changes and nobody's set that month's sheet yet. Only
+NEW intakes need this; a case already in progress keeps writing back to
+whichever sheet it was created against, even after you switch. Remember
+to share each new monthly sheet with the service account's email first
+(shown in the error message if you forget).
+
 ## Setup (one time)
 
 1. Install Python 3.10+ on the host machine.

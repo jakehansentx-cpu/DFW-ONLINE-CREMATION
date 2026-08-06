@@ -36,12 +36,55 @@ Column layout (matches your sheet):
 where column A has a value but B, D, and E are all still empty. That's
 what makes a row "reserved but unclaimed" rather than a completed
 historical case.
+
+Every function below takes a sheet_id as its first argument rather than
+reading one fixed spreadsheet out of config -- a new call log spreadsheet
+gets generated every month, and a case created against last month's sheet
+needs to keep reading/writing that same sheet for the rest of its life
+even after this month's sheet becomes "current" for new intakes (see
+get_current_sheet_id()/set_current_sheet() in app.py, and the
+cases.sheet_id column each case remembers this at creation time).
 """
+import json
+import re
+
 import config
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+
+# Matches the spreadsheet ID out of any Google Sheets URL shape
+# (/d/<id>/edit, /d/<id>/edit#gid=0, /d/<id>, etc).
+_SHEET_URL_RE = re.compile(r"/spreadsheets/d/([a-zA-Z0-9-_]+)")
+# A bare ID pasted with no URL around it at all.
+_BARE_ID_RE = re.compile(r"^[a-zA-Z0-9-_]{20,}$")
+
+
+def extract_sheet_id(url_or_id):
+    """Pulls the spreadsheet ID out of a pasted Google Sheets link, or
+    accepts a bare ID typed/pasted directly. Returns None if it doesn't
+    look like either."""
+    text = (url_or_id or "").strip()
+    if not text:
+        return None
+    m = _SHEET_URL_RE.search(text)
+    if m:
+        return m.group(1)
+    if _BARE_ID_RE.match(text):
+        return text
+    return None
+
+
+def service_account_email():
+    """Reads just the client_email out of the service account key file --
+    shown to staff so they know exactly who to share each new monthly
+    sheet with. Returns None if the key file isn't set up yet."""
+    try:
+        with open(config.GOOGLE_SERVICE_ACCOUNT_FILE) as f:
+            return json.load(f).get("client_email")
+    except (OSError, ValueError):
+        return None
 
 
 def _get_service():
@@ -56,7 +99,18 @@ def _sheet_range(a1_range):
     return f"{tab}!{a1_range}" if tab else a1_range
 
 
-def find_next_unclaimed_case():
+def verify_access(sheet_id):
+    """Raises if this sheet can't be read with the current service
+    account credentials -- used when staff set a new monthly sheet, so a
+    forgotten "Share with the service account" step gets caught
+    immediately instead of silently failing on the next intake."""
+    service = _get_service()
+    service.spreadsheets().values().get(
+        spreadsheetId=sheet_id, range=_sheet_range("A1")
+    ).execute()
+
+
+def find_next_unclaimed_case(sheet_id):
     """
     Returns (row_number, case_number) for the first reserved-but-unclaimed
     row, or (None, None) if none found. row_number is 1-indexed to match
@@ -66,7 +120,7 @@ def find_next_unclaimed_case():
     result = (
         service.spreadsheets()
         .values()
-        .get(spreadsheetId=config.GOOGLE_SHEET_ID, range=_sheet_range("A:E"))
+        .get(spreadsheetId=sheet_id, range=_sheet_range("A:E"))
         .execute()
     )
     values = result.get("values", [])
@@ -85,7 +139,7 @@ def find_next_unclaimed_case():
     return None, None
 
 
-def backfill_intake(row_num, date_str, name, funeral_home):
+def backfill_intake(sheet_id, row_num, date_str, name, funeral_home):
     """Writes date/name/funeral home into columns B, D, E for a given row."""
     service = _get_service()
     body = {
@@ -97,11 +151,11 @@ def backfill_intake(row_num, date_str, name, funeral_home):
         ],
     }
     service.spreadsheets().values().batchUpdate(
-        spreadsheetId=config.GOOGLE_SHEET_ID, body=body
+        spreadsheetId=sheet_id, body=body
     ).execute()
 
 
-def backfill_removal_details(row_num, time_received, removal_type, disposition, removal_by, night):
+def backfill_removal_details(sheet_id, row_num, time_received, removal_type, disposition, removal_by, night):
     """Writes time received/removal type/disposition/removal by/night into
     columns C, F, G, H, I for a given row."""
     service = _get_service()
@@ -116,22 +170,22 @@ def backfill_removal_details(row_num, time_received, removal_type, disposition, 
         ],
     }
     service.spreadsheets().values().batchUpdate(
-        spreadsheetId=config.GOOGLE_SHEET_ID, body=body
+        spreadsheetId=sheet_id, body=body
     ).execute()
 
 
-def backfill_location(row_num, location_text):
+def backfill_location(sheet_id, row_num, location_text):
     """Writes the cooler + shelf/slot location into column L for a given row."""
     service = _get_service()
     service.spreadsheets().values().update(
-        spreadsheetId=config.GOOGLE_SHEET_ID,
+        spreadsheetId=sheet_id,
         range=_sheet_range(f"L{row_num}"),
         valueInputOption="USER_ENTERED",
         body={"values": [[location_text]]},
     ).execute()
 
 
-def find_row_for_case(case_number):
+def find_row_for_case(sheet_id, case_number):
     """Looks up which row a given case number is on (needed before writing
     to column L, since we only know the case number at that point, not the
     row). Returns row_number or None."""
@@ -139,7 +193,7 @@ def find_row_for_case(case_number):
     result = (
         service.spreadsheets()
         .values()
-        .get(spreadsheetId=config.GOOGLE_SHEET_ID, range=_sheet_range("A:A"))
+        .get(spreadsheetId=sheet_id, range=_sheet_range("A:A"))
         .execute()
     )
     values = result.get("values", [])
@@ -149,33 +203,33 @@ def find_row_for_case(case_number):
     return None
 
 
-def row_has_case_link(row_num):
+def row_has_case_link(sheet_id, row_num):
     """True if column N already has anything in it for this row -- lets
     the caller skip re-writing it on every re-save."""
     service = _get_service()
     result = (
         service.spreadsheets()
         .values()
-        .get(spreadsheetId=config.GOOGLE_SHEET_ID, range=_sheet_range(f"N{row_num}"))
+        .get(spreadsheetId=sheet_id, range=_sheet_range(f"N{row_num}"))
         .execute()
     )
     values = result.get("values", [])
     return bool(values and values[0] and str(values[0][0]).strip())
 
 
-def backfill_case_link(row_num, case_url):
+def backfill_case_link(sheet_id, row_num, case_url):
     """Writes a clickable link to the case's page (QR + info) into
     column N."""
     service = _get_service()
     service.spreadsheets().values().update(
-        spreadsheetId=config.GOOGLE_SHEET_ID,
+        spreadsheetId=sheet_id,
         range=_sheet_range(f"N{row_num}"),
         valueInputOption="USER_ENTERED",
         body={"values": [[case_url]]},
     ).execute()
 
 
-def backfill_cremation(row_num, timestamp_str, disk_number=None):
+def backfill_cremation(sheet_id, row_num, timestamp_str, disk_number=None):
     """Writes "Cremated" into column M (Final Disposition -- otherwise
     filled in manually by staff, this is the one case where the app
     writes to it), the cremation date/time into column J, and the
@@ -189,11 +243,11 @@ def backfill_cremation(row_num, timestamp_str, disk_number=None):
         data.append({"range": _sheet_range(f"K{row_num}"), "values": [[disk_number]]})
     body = {"valueInputOption": "USER_ENTERED", "data": data}
     service.spreadsheets().values().batchUpdate(
-        spreadsheetId=config.GOOGLE_SHEET_ID, body=body
+        spreadsheetId=sheet_id, body=body
     ).execute()
 
 
-def backfill_released_to(row_num, released_to):
+def backfill_released_to(sheet_id, row_num, released_to):
     """Writes who/where a decedent was released to into column O, and
     the same info into column M (Final Disposition) -- a normal release
     is itself a final disposition, same as a cremation is."""
@@ -206,17 +260,17 @@ def backfill_released_to(row_num, released_to):
         ],
     }
     service.spreadsheets().values().batchUpdate(
-        spreadsheetId=config.GOOGLE_SHEET_ID, body=body
+        spreadsheetId=sheet_id, body=body
     ).execute()
 
 
-def backfill_checkout(row_num, summary):
+def backfill_checkout(sheet_id, row_num, summary):
     """Writes the current checkout status into column P -- an empty
     string clears it back to blank once the decedent is checked back
     in."""
     service = _get_service()
     service.spreadsheets().values().update(
-        spreadsheetId=config.GOOGLE_SHEET_ID,
+        spreadsheetId=sheet_id,
         range=_sheet_range(f"P{row_num}"),
         valueInputOption="USER_ENTERED",
         body={"values": [[summary]]},

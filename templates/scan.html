@@ -28,6 +28,16 @@
     </select>
   </div>
 
+  <button id="sheetToggleBtn" class="secondary-btn" style="margin-bottom:16px;">🗂️ This Month's Spreadsheet</button>
+  <div id="sheetPanel" class="info-form hidden">
+    <h3 style="margin-top:0;">This Month's Spreadsheet</h3>
+    <p id="sheetPanelMsg" style="color:#aab; font-size:14px;"></p>
+    <label>Spreadsheet Link</label>
+    <input id="sheetUrlInput" type="text" placeholder="Paste the Google Sheets link here" autocomplete="off">
+    <button id="sheetSetBtn" class="primary-btn">Save New Spreadsheet</button>
+    <div id="sheetSetStatus" class="status-msg"></div>
+  </div>
+
   <div class="mode-bar">
     <button class="mode-btn active" data-mode="sheet-intake">Decedent Information</button>
     <button class="mode-btn" data-mode="move">Move</button>

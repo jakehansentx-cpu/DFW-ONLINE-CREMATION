@@ -231,6 +231,10 @@ body {
 }
 .staff-row.unset { border-color: rgba(240,183,79,.5); }
 
+#sheetToggleBtn.attention {
+  background: rgba(240,183,79,.15); border: 1px solid rgba(240,183,79,.5); color: #f0b74f;
+}
+
 .mode-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .mode-btn {
   flex: 1 1 30%; padding: 12px 4px; font-size: 13.5px;

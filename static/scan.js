@@ -52,6 +52,61 @@ staffSelect.addEventListener("change", () => {
   localStorage.setItem(STAFF_STORAGE_KEY, staffSelect.value);
 });
 
+// ---------------- Monthly spreadsheet ----------------
+// A new call log spreadsheet gets generated every month. New intakes
+// (Decedent Information) need to know which one is "current"; a case
+// already in progress keeps resolving to whichever sheet it was created
+// against, so switching this over mid-month never moves an open case to
+// the wrong spreadsheet -- see sheet_id in app.py.
+const sheetToggleBtn = document.getElementById("sheetToggleBtn");
+const sheetPanel = document.getElementById("sheetPanel");
+const sheetPanelMsg = document.getElementById("sheetPanelMsg");
+const sheetUrlInput = document.getElementById("sheetUrlInput");
+const sheetSetBtn = document.getElementById("sheetSetBtn");
+const sheetSetStatus = document.getElementById("sheetSetStatus");
+
+sheetToggleBtn.addEventListener("click", () => {
+  sheetPanel.classList.toggle("hidden");
+});
+
+sheetSetBtn.addEventListener("click", async () => {
+  sheetSetStatus.textContent = "Checking access...";
+  sheetSetStatus.className = "status-msg";
+  sheetSetBtn.disabled = true;
+  try {
+    const result = await postJSON("/api/settings/sheet", { url: sheetUrlInput.value }, 15000);
+    sheetSetStatus.textContent = `Saved. New intakes now go to "${result.label}".`;
+    sheetSetStatus.className = "status-msg ok";
+    sheetUrlInput.value = "";
+    sheetToggleBtn.classList.remove("attention");
+  } catch (err) {
+    sheetSetStatus.textContent = err.message;
+    sheetSetStatus.className = "status-msg err";
+  } finally {
+    sheetSetBtn.disabled = false;
+  }
+});
+
+(async function checkSheetStatus() {
+  try {
+    const res = await fetch("/api/settings/sheet-status");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.needs_new_sheet) {
+      sheetToggleBtn.classList.add("attention");
+      sheetPanel.classList.remove("hidden");
+      sheetPanelMsg.textContent =
+        "A new month has started -- paste this month's spreadsheet link below so new intakes go to the right place. Cases already in progress are unaffected.";
+    } else {
+      sheetPanelMsg.textContent = data.current_sheet_label
+        ? `Currently set to "${data.current_sheet_label}". Paste a new link below to switch it.`
+        : "Paste a new spreadsheet link below to switch it.";
+    }
+  } catch (e) {
+    console.error("sheet status check failed", e);
+  }
+})();
+
 // Signature capture for the Release form -- drawn on a canvas via
 // Pointer Events so mouse, touch, and stylus all work the same way.
 const sigCtx = signatureCanvas.getContext("2d");

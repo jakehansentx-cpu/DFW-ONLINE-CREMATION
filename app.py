@@ -102,6 +102,36 @@ def _ensure_column(db, table, column, coltype):
         db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
 
 
+def get_setting(db, key, default=None):
+    row = db.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row is not None and row["value"] is not None else default
+
+
+def set_setting(db, key, value):
+    db.execute(
+        "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, value),
+    )
+
+
+def current_sheet_id(db):
+    """The spreadsheet new intakes should be pulled from/written to --
+    NOT necessarily the right sheet for an already-existing case (see
+    case_sheet_id below), since last month's cases still live on last
+    month's sheet even after this month's becomes current."""
+    return get_setting(db, "current_sheet_id", config.GOOGLE_SHEET_ID)
+
+
+def case_sheet_id(db, case_row):
+    """The specific spreadsheet a given case actually lives on, set once
+    at intake and never changed afterward -- this is what every
+    Move/Release/Cremate/Checkout sheet write should target, so a case
+    started last month keeps syncing to last month's sheet even after
+    this month's sheet becomes current for new intakes."""
+    return case_row["sheet_id"] or current_sheet_id(db)
+
+
 def init_db():
     db = sqlite3.connect(DB_PATH)
     db.row_factory = sqlite3.Row
@@ -156,6 +186,11 @@ def init_db():
             real_case_code TEXT NOT NULL,
             created_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
         """
     )
     # Migrate DBs created before these columns existed.
@@ -175,6 +210,33 @@ def init_db():
     _ensure_column(db, "cases", "release_signature", "TEXT")
     _ensure_column(db, "cases", "disk_number", "TEXT")
     _ensure_column(db, "moves", "disk_number", "TEXT")
+    _ensure_column(db, "cases", "sheet_id", "TEXT")
+    db.commit()
+
+    # Every case created before the monthly-sheet feature existed really
+    # was created against the one sheet config.py used to hardcode --
+    # backfill that explicitly rather than leaving it NULL, so old cases
+    # keep resolving to the sheet they actually live in.
+    db.execute(
+        "UPDATE cases SET sheet_id = ? WHERE sheet_id IS NULL",
+        (config.GOOGLE_SHEET_ID,),
+    )
+    # Likewise, treat that same hardcoded sheet as "this month's sheet"
+    # the first time this runs, seeded to the CURRENT month so upgrading
+    # doesn't immediately nag for a new one -- only once an actual new
+    # month rolls around will it ask.
+    existing_sheet = db.execute(
+        "SELECT value FROM app_settings WHERE key = 'current_sheet_id'"
+    ).fetchone()
+    if existing_sheet is None:
+        db.execute(
+            "INSERT INTO app_settings (key, value) VALUES ('current_sheet_id', ?)",
+            (config.GOOGLE_SHEET_ID,),
+        )
+        db.execute(
+            "INSERT INTO app_settings (key, value) VALUES ('current_sheet_month', ?)",
+            (datetime.now().strftime("%Y-%m"),),
+        )
     db.commit()
 
     # Ensure every location in config.py exists in the DB, WITHOUT ever
@@ -261,7 +323,7 @@ def _resolve_field_tag(db, case_code):
     if not config.GOOGLE_SHEETS_ENABLED:
         return None, ("Can't claim a case number for a field tag -- Google Sheets is disabled", 503)
     try:
-        _sheet_row, real_case_code = _sheets().find_next_unclaimed_case()
+        _sheet_row, real_case_code = _sheets().find_next_unclaimed_case(current_sheet_id(db))
     except Exception as e:
         return None, (f"Could not reach the sheet to claim a case number: {e}", 503)
     if not real_case_code:
@@ -441,6 +503,57 @@ def board_page():
 @login_required
 def scan_page():
     return render_template("scan.html", staff_names=config.STAFF_NAMES)
+
+
+@app.route("/api/settings/sheet-status")
+@login_required
+def api_sheet_status():
+    """Whether it's time to nag for a new monthly spreadsheet -- compares
+    the real calendar month against the month the current sheet was set
+    for. Only pulling a NEW case number (Decedent Information / sheet
+    intake) actually needs this; every other action keeps working fine
+    off whichever sheet each existing case already remembers."""
+    db = get_db()
+    real_month = datetime.now().strftime("%Y-%m")
+    stored_month = get_setting(db, "current_sheet_month")
+    return jsonify(
+        needs_new_sheet=(stored_month != real_month),
+        current_sheet_id=current_sheet_id(db),
+        current_sheet_label=get_setting(db, "current_sheet_label"),
+        current_month=real_month,
+    )
+
+
+@app.route("/api/settings/sheet", methods=["POST"])
+@login_required
+def api_set_sheet():
+    """Points new intakes at a newly-generated monthly spreadsheet. Cases
+    already created against a previous sheet are unaffected -- they keep
+    resolving to whatever sheet_id they were stamped with at intake."""
+    if not config.GOOGLE_SHEETS_ENABLED:
+        return jsonify(error="Google Sheets isn't turned on yet (see config.py)"), 400
+
+    data = request.get_json(force=True)
+    url = (data.get("url") or "").strip()
+    sheet_id = _sheets().extract_sheet_id(url)
+    if not sheet_id:
+        return jsonify(error="That doesn't look like a Google Sheets link -- paste the full URL from your browser's address bar."), 400
+
+    try:
+        _sheets().verify_access(sheet_id)
+    except Exception as e:
+        email = _sheets().service_account_email() or "the service account"
+        return jsonify(
+            error=f"Couldn't open that sheet ({e}). Make sure it's shared with {email}."
+        ), 400
+
+    db = get_db()
+    label = datetime.now().strftime("%B %Y")
+    set_setting(db, "current_sheet_id", sheet_id)
+    set_setting(db, "current_sheet_label", label)
+    set_setting(db, "current_sheet_month", datetime.now().strftime("%Y-%m"))
+    db.commit()
+    return jsonify(ok=True, sheet_id=sheet_id, label=label)
 
 
 @app.route("/case/<case_code>")
@@ -690,8 +803,8 @@ def api_case_lookup():
     row = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
     if row is None:
         db.execute(
-            "INSERT INTO cases (case_code, status, created_at) VALUES (?, 'pending_info', ?)",
-            (case_code, now()),
+            "INSERT INTO cases (case_code, status, created_at, sheet_id) VALUES (?, 'pending_info', ?, ?)",
+            (case_code, now(), current_sheet_id(db)),
         )
         db.commit()
         row = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
@@ -733,10 +846,11 @@ def api_case_info(case_code):
     sheet_warning = None
     if config.GOOGLE_SHEETS_ENABLED:
         try:
-            sheet_row = _sheets().find_row_for_case(case_code)
+            sid = case_sheet_id(db, row)
+            sheet_row = _sheets().find_row_for_case(sid, case_code)
             if sheet_row:
                 _sheets().backfill_intake(
-                    sheet_row, format_date_for_sheet(pickup_date), name, funeral_home
+                    sid, sheet_row, format_date_for_sheet(pickup_date), name, funeral_home
                 )
         except Exception as e:
             sheet_warning = f"Saved locally, but sheet write failed: {e}"
@@ -748,7 +862,7 @@ def api_case_info(case_code):
     return jsonify(resp)
 
 
-def _backfill_case_location(case_code, loc):
+def _backfill_case_location(db, case, loc):
     """Writes a case's current location into the sheet -- shared by both
     Assign (first placement) and Move (relocation), so a moved decedent's
     COOLER LOCATION column stays accurate instead of only reflecting
@@ -756,10 +870,11 @@ def _backfill_case_location(case_code, loc):
     if not config.GOOGLE_SHEETS_ENABLED:
         return None
     try:
-        sheet_row = _sheets().find_row_for_case(case_code)
+        sid = case_sheet_id(db, case)
+        sheet_row = _sheets().find_row_for_case(sid, case["case_code"])
         if sheet_row:
             loc_text = f"{loc['cooler_name']} - Shelf {loc['shelf']}{loc['slot'] or ''}"
-            _sheets().backfill_location(sheet_row, loc_text)
+            _sheets().backfill_location(sid, sheet_row, loc_text)
         return None
     except Exception as e:
         # Local placement already succeeded and is the source of truth
@@ -802,7 +917,7 @@ def api_assign():
     )
     db.commit()
 
-    sheet_warning = _backfill_case_location(case_code, loc)
+    sheet_warning = _backfill_case_location(db, case, loc)
 
     resp = dict(ok=True, case_code=case_code, location_code=location_code)
     if sheet_warning:
@@ -821,7 +936,7 @@ def _perform_move(case, new_loc, staff):
         (case["id"], old_loc_id, new_loc["id"], now(), staff),
     )
     db.commit()
-    return _backfill_case_location(case["case_code"], new_loc)
+    return _backfill_case_location(db, case, new_loc)
 
 
 @app.route("/api/move", methods=["POST"])
@@ -927,14 +1042,15 @@ def api_release():
     sheet_warning = None
     if config.GOOGLE_SHEETS_ENABLED and released_to:
         try:
-            sheet_row = _sheets().find_row_for_case(case_code)
+            sid = case_sheet_id(db, case)
+            sheet_row = _sheets().find_row_for_case(sid, case_code)
             if sheet_row:
                 if cremated:
                     dt = datetime.now()
                     stamp = f"{dt.month}/{dt.day}/{dt.year} {dt.strftime('%I:%M %p').lstrip('0')}"
-                    _sheets().backfill_cremation(sheet_row, stamp, disk_number)
+                    _sheets().backfill_cremation(sid, sheet_row, stamp, disk_number)
                 else:
-                    _sheets().backfill_released_to(sheet_row, released_to)
+                    _sheets().backfill_released_to(sid, sheet_row, released_to)
         except Exception as e:
             sheet_warning = f"Released locally, but sheet write failed: {e}"
 
@@ -983,13 +1099,14 @@ def api_checkout():
     sheet_warning = None
     if config.GOOGLE_SHEETS_ENABLED:
         try:
-            sheet_row = _sheets().find_row_for_case(case_code)
+            sid = case_sheet_id(db, case)
+            sheet_row = _sheets().find_row_for_case(sid, case_code)
             if sheet_row:
                 summary = f"Checked out to {org}"
                 if reason:
                     summary += f" ({reason})"
                 summary += f" since {format_date_for_sheet(checked_out_at.split(' ')[0])}"
-                _sheets().backfill_checkout(sheet_row, summary)
+                _sheets().backfill_checkout(sid, sheet_row, summary)
         except Exception as e:
             sheet_warning = f"Checked out locally, but sheet write failed: {e}"
 
@@ -1029,9 +1146,10 @@ def api_checkin():
     sheet_warning = None
     if config.GOOGLE_SHEETS_ENABLED:
         try:
-            sheet_row = _sheets().find_row_for_case(case_code)
+            sid = case_sheet_id(db, case)
+            sheet_row = _sheets().find_row_for_case(sid, case_code)
             if sheet_row:
-                _sheets().backfill_checkout(sheet_row, "")
+                _sheets().backfill_checkout(sid, sheet_row, "")
         except Exception as e:
             sheet_warning = f"Checked in locally, but sheet write failed: {e}"
 
@@ -1074,9 +1192,9 @@ def api_intake_sync():
 
     if row is None:
         db.execute(
-            """INSERT INTO cases (case_code, name, funeral_home, pickup_date, status, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (case_code, name, funeral_home, pickup_date, new_status, now()),
+            """INSERT INTO cases (case_code, name, funeral_home, pickup_date, status, created_at, sheet_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (case_code, name, funeral_home, pickup_date, new_status, now(), current_sheet_id(db)),
         )
     elif row["status"] in ("pending_info", "pending_location"):
         db.execute(
@@ -1107,20 +1225,21 @@ def api_sheet_intake_start():
     if not config.GOOGLE_SHEETS_ENABLED:
         return jsonify(error="Google Sheets intake isn't turned on yet (see config.py)"), 400
 
+    db = get_db()
+    sid = current_sheet_id(db)
     try:
-        row_num, case_code = _sheets().find_next_unclaimed_case()
+        row_num, case_code = _sheets().find_next_unclaimed_case(sid)
     except Exception as e:
         return jsonify(error=f"Couldn't reach the spreadsheet: {e}"), 502
 
     if case_code is None:
         return jsonify(error="No unclaimed case numbers found in the sheet -- add more rows"), 404
 
-    db = get_db()
     existing = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
     if existing is None:
         db.execute(
-            "INSERT INTO cases (case_code, status, created_at) VALUES (?, 'pending_info', ?)",
-            (case_code, now()),
+            "INSERT INTO cases (case_code, status, created_at, sheet_id) VALUES (?, 'pending_info', ?, ?)",
+            (case_code, now(), sid),
         )
         db.commit()
 
@@ -1164,21 +1283,22 @@ def api_sheet_intake_save():
 
     if config.GOOGLE_SHEETS_ENABLED:
         try:
+            sid = case_sheet_id(db, row)
             sheet_row = data.get("sheet_row")
             if not sheet_row:
-                sheet_row = _sheets().find_row_for_case(case_code)
+                sheet_row = _sheets().find_row_for_case(sid, case_code)
             if sheet_row:
                 _sheets().backfill_intake(
-                    sheet_row, format_date_for_sheet(pickup_date), name, funeral_home
+                    sid, sheet_row, format_date_for_sheet(pickup_date), name, funeral_home
                 )
                 _sheets().backfill_removal_details(
-                    sheet_row, time_received, removal_type, disposition, removal_by, night
+                    sid, sheet_row, time_received, removal_type, disposition, removal_by, night
                 )
-                if not _sheets().row_has_case_link(sheet_row):
+                if not _sheets().row_has_case_link(sid, sheet_row):
                     target_url = request.host_url.rstrip("/") + url_for(
                         "case_detail_page", case_code=case_code
                     )
-                    _sheets().backfill_case_link(sheet_row, target_url)
+                    _sheets().backfill_case_link(sid, sheet_row, target_url)
         except Exception as e:
             # Local save already succeeded -- don't fail the whole request
             # over a sheet write hiccup, just tell the caller it happened.
