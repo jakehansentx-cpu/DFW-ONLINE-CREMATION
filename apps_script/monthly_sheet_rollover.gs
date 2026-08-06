@@ -37,12 +37,12 @@
  * year), that's a manual one-line edit here, not automatic.
  */
 
-const SERVICE_ACCOUNT_EMAIL = "PASTE-YOUR-SERVICE-ACCOUNT-EMAIL-HERE@your-project.iam.gserviceaccount.com";
-const TEMPLATE_SHEET_ID = "PASTE-A-TEMPLATE-SPREADSHEET-ID-HERE"; // headers already set up, columns A-P, no data rows
-const CURRENT_SHEET_ID = "PASTE-THIS-MONTHS-CURRENTLY-ACTIVE-SHEET-ID-HERE"; // only used once, by bootstrapPreviousSheetId()
+const SERVICE_ACCOUNT_EMAIL = "metro-cooler-location@metro-cooler-location.iam.gserviceaccount.com";
+const TEMPLATE_SHEET_ID = "1I9hBepzOqTBBv9k0EpcAptHvb_YKxY0oTijIn4NMNwM"; // "CALL LOG TEMPLATE" -- headers only, no data rows
+const CURRENT_SHEET_ID = "1QzFHSraw7OTfJKp-UrP0nSpZJB5WxgLUPadiWiNLVbE"; // "JULY CALL LOG" -- only used once, by bootstrapPreviousSheetId()
 const DEST_FOLDER_ID = ""; // optional -- leave blank to create in "My Drive" root
 const ROWS_TO_PRENUMBER = 300;
-const NOTIFY_EMAIL = ""; // optional -- your own email, for a confirmation each month
+const NOTIFY_EMAIL = "jakehansentx@gmail.com";
 
 function bootstrapPreviousSheetId() {
   PropertiesService.getScriptProperties().setProperty("PREVIOUS_SHEET_ID", CURRENT_SHEET_ID);
