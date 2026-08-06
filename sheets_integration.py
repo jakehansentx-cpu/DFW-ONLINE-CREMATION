@@ -14,8 +14,9 @@ Column layout (matches your sheet):
     J = cremation date/time -- filled in by the app when a case is marked
         Cremated (see backfill_cremation()); otherwise blank
     L = cooler location + shelf/slot (written back after Assign/Move)
-    M = Final Disposition -- filled in manually by staff, EXCEPT when a
-        case is marked Cremated, when the app writes "Cremated" here too
+    M = Final Disposition -- the app writes here on both Release
+        ("Released to <facility/funeral home/org>") and Cremated
+        ("Cremated"); otherwise blank/manual
     N = link to the case's page (has a working QR on it, and a Print
         Tag link) -- NOT a picture in the cell. Google Drive service
         accounts have no storage quota of their own and there's no
@@ -190,13 +191,19 @@ def backfill_cremation(row_num, timestamp_str):
 
 
 def backfill_released_to(row_num, released_to):
-    """Writes who/where a decedent was released to into column O."""
+    """Writes who/where a decedent was released to into column O, and
+    the same info into column M (Final Disposition) -- a normal release
+    is itself a final disposition, same as a cremation is."""
     service = _get_service()
-    service.spreadsheets().values().update(
-        spreadsheetId=config.GOOGLE_SHEET_ID,
-        range=_sheet_range(f"O{row_num}"),
-        valueInputOption="USER_ENTERED",
-        body={"values": [[released_to]]},
+    body = {
+        "valueInputOption": "USER_ENTERED",
+        "data": [
+            {"range": _sheet_range(f"M{row_num}"), "values": [[f"Released to {released_to}"]]},
+            {"range": _sheet_range(f"O{row_num}"), "values": [[released_to]]},
+        ],
+    }
+    service.spreadsheets().values().batchUpdate(
+        spreadsheetId=config.GOOGLE_SHEET_ID, body=body
     ).execute()
 
 
