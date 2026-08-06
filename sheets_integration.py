@@ -52,7 +52,16 @@ import config
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    # Read-only Drive metadata -- just enough to notice a new monthly
+    # sheet has been shared with the service account (see
+    # find_shared_sheet_by_name() below) without granting any ability to
+    # read file *contents* via Drive itself or touch anything not shared
+    # with it. Requires the Drive API to be enabled on the same Google
+    # Cloud project as the Sheets API (see README).
+    "https://www.googleapis.com/auth/drive.metadata.readonly",
+]
 
 # Matches the spreadsheet ID out of any Google Sheets URL shape
 # (/d/<id>/edit, /d/<id>/edit#gid=0, /d/<id>, etc).
@@ -92,6 +101,43 @@ def _get_service():
         config.GOOGLE_SERVICE_ACCOUNT_FILE, scopes=SCOPES
     )
     return build("sheets", "v4", credentials=creds)
+
+
+def _get_drive_service():
+    creds = service_account.Credentials.from_service_account_file(
+        config.GOOGLE_SERVICE_ACCOUNT_FILE, scopes=SCOPES
+    )
+    return build("drive", "v3", credentials=creds)
+
+
+def find_shared_sheet_by_name(name):
+    """Looks for a spreadsheet with this exact name that's been shared
+    with the service account (not created by it -- see the Apps Script
+    in apps_script/monthly_sheet_rollover.gs, which creates each new
+    monthly sheet under a real Google account with real storage, then
+    shares it here) but not yet adopted as a sheet_id anywhere. Returns
+    the spreadsheet ID, or None if nothing matches yet.
+
+    If more than one file happens to match (shouldn't normally happen),
+    the most recently created one wins."""
+    service = _get_drive_service()
+    result = (
+        service.files()
+        .list(
+            q=(
+                f"name = '{name}' "
+                "and mimeType = 'application/vnd.google-apps.spreadsheet' "
+                "and sharedWithMe = true "
+                "and trashed = false"
+            ),
+            fields="files(id, createdTime)",
+            orderBy="createdTime desc",
+            pageSize=1,
+        )
+        .execute()
+    )
+    files = result.get("files", [])
+    return files[0]["id"] if files else None
 
 
 def _sheet_range(a1_range):

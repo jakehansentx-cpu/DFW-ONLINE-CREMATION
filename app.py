@@ -620,6 +620,21 @@ def scan_page():
     return render_template("scan.html", staff_names=config.STAFF_NAMES)
 
 
+def expected_sheet_name(dt):
+    """The exact spreadsheet name the app looks for when trying to
+    auto-adopt a new monthly sheet -- MUST match the naming the Apps
+    Script (apps_script/monthly_sheet_rollover.gs) uses when it creates
+    one, e.g. "SEPTEMBER 2026 CALL LOG"."""
+    return f"{dt.strftime('%B').upper()} {dt.year} CALL LOG"
+
+
+def _adopt_sheet(db, sheet_id, label):
+    set_setting(db, "current_sheet_id", sheet_id)
+    set_setting(db, "current_sheet_label", label)
+    set_setting(db, "current_sheet_month", datetime.now().strftime("%Y-%m"))
+    db.commit()
+
+
 @app.route("/api/settings/sheet-status")
 @login_required
 def api_sheet_status():
@@ -627,15 +642,39 @@ def api_sheet_status():
     the real calendar month against the month the current sheet was set
     for. Only pulling a NEW case number (Decedent Information / sheet
     intake) actually needs this; every other action keeps working fine
-    off whichever sheet each existing case already remembers."""
+    off whichever sheet each existing case already remembers.
+
+    Before falling back to the manual "paste a link" prompt, this first
+    checks whether a new sheet has already been auto-created and shared
+    with the service account (see apps_script/monthly_sheet_rollover.gs)
+    and, if so, adopts it automatically -- no staff action needed most
+    months. The manual panel is still there as a fallback in case that
+    automation didn't run or the share step failed for some reason.
+    """
     db = get_db()
     real_month = datetime.now().strftime("%Y-%m")
     stored_month = get_setting(db, "current_sheet_month")
+    needs_new_sheet = stored_month != real_month
+    auto_adopted_label = None
+
+    if needs_new_sheet and config.GOOGLE_SHEETS_ENABLED:
+        try:
+            expected_name = expected_sheet_name(datetime.now())
+            found_id = _sheets().find_shared_sheet_by_name(expected_name)
+            if found_id:
+                _sheets().verify_access(found_id)
+                _adopt_sheet(db, found_id, expected_name.title())
+                needs_new_sheet = False
+                auto_adopted_label = expected_name.title()
+        except Exception:
+            pass  # Drive lookup hiccup -- the manual panel still covers this
+
     return jsonify(
-        needs_new_sheet=(stored_month != real_month),
+        needs_new_sheet=needs_new_sheet,
         current_sheet_id=current_sheet_id(db),
         current_sheet_label=get_setting(db, "current_sheet_label"),
         current_month=real_month,
+        auto_adopted_label=auto_adopted_label,
     )
 
 
@@ -664,10 +703,7 @@ def api_set_sheet():
 
     db = get_db()
     label = datetime.now().strftime("%B %Y")
-    set_setting(db, "current_sheet_id", sheet_id)
-    set_setting(db, "current_sheet_label", label)
-    set_setting(db, "current_sheet_month", datetime.now().strftime("%Y-%m"))
-    db.commit()
+    _adopt_sheet(db, sheet_id, label)
     return jsonify(ok=True, sheet_id=sheet_id, label=label)
 
 

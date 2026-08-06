@@ -100,11 +100,14 @@ sheetSetBtn.addEventListener("click", async () => {
     const res = await fetch("/api/settings/sheet-status");
     if (!res.ok) return;
     const data = await res.json();
-    if (data.needs_new_sheet) {
+    if (data.auto_adopted_label) {
+      showStatus(`New month detected -- automatically switched to "${data.auto_adopted_label}".`, true);
+      sheetPanelMsg.textContent = `Currently set to "${data.current_sheet_label}" (auto-detected). Paste a new link below if you ever need to switch it manually.`;
+    } else if (data.needs_new_sheet) {
       sheetToggleBtn.classList.add("attention");
       sheetPanel.classList.remove("hidden");
       sheetPanelMsg.textContent =
-        "A new month has started -- paste this month's spreadsheet link below so new intakes go to the right place. Cases already in progress are unaffected.";
+        "A new month has started and no new sheet has been auto-detected yet -- paste this month's spreadsheet link below so new intakes go to the right place. Cases already in progress are unaffected.";
     } else {
       sheetPanelMsg.textContent = data.current_sheet_label
         ? `Currently set to "${data.current_sheet_label}". Paste a new link below to switch it.`

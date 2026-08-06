@@ -56,6 +56,23 @@ whichever sheet it was created against, even after you switch. Remember
 to share each new monthly sheet with the service account's email first
 (shown in the error message if you forget).
 
+**Fully automatic rollover (optional):** the manual link-paste above can
+be skipped entirely with `apps_script/monthly_sheet_rollover.gs` -- a
+script that runs inside YOUR Google account (not the service account,
+which has no Drive storage of its own and can't create files) on a
+monthly schedule Google manages. It duplicates a template spreadsheet,
+continues the case-number sequence in column A from wherever the
+previous month's sheet left off, and shares the result with the service
+account automatically. The app then notices it (same sheet-status check
+that drives the manual banner) and adopts it with zero staff action.
+See the setup instructions at the top of that file -- it's a one-time,
+few-minutes setup (paste the script into any Google Sheet's Apps
+Script editor, fill in three constants, run two setup functions once).
+Requires enabling the Google Drive API on the same Google Cloud project
+the Sheets API is already enabled on. If the automation ever misses a
+month (sharing failed, script error, etc.), the manual panel is still
+there as a fallback -- nothing breaks, it just asks a human instead.
+
 **Manual spreadsheet entry:** some staff prefer typing name/date/
 funeral home/disposition/night straight into the spreadsheet instead of
 using the scan station -- that's fine, but a decedent only gets an
