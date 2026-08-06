@@ -399,22 +399,31 @@ def location_text(row):
     return f"{row['cooler_name']} - Shelf {row['shelf']}{row['slot'] or ''}"
 
 
-def secondary_status_text(row):
-    """Where things currently stand, computed from the case's lifecycle
-    state -- distinct from case.disposition (spreadsheet column G), which
-    is what the funeral home wants done (Cremation, Burial, PU/HOLD,
-    on hold pending authorization, etc.) rather than where things are
-    right now."""
+def primary_status_text(row):
+    """While a decedent is still in our care, column G is just an
+    operational note (Pickup & Hold, Pickup & Prep, dropped off by a
+    funeral home/organization, etc.), so it's shown exactly as typed in
+    the sheet. Once a case reaches final disposition there are only two
+    possible outcomes -- cremated here, or released to another funeral
+    home/organization -- so the field switches over to state that
+    outcome plainly instead of whatever intent was originally logged."""
     if row is None:
         return None
-    status = row["status"]
-    if status == "released":
+    if row["status"] == "released":
         if row["released_to"] == "Cremated":
-            text = "Cremated"
-            if row["disk_number"]:
-                text += f" — Disk #{row['disk_number']}"
-            return text
+            when = _format_when(row["released_at"]) if row["released_at"] else None
+            return f"Cremated on {when}" if when else "Cremated"
         return f"Released to {row['released_to']}" if row["released_to"] else "Released"
+    return row["disposition"] or "—"
+
+
+def secondary_status_text(row):
+    """Physical/logistics detail alongside the primary status -- once a
+    case has reached final disposition, Status already states the
+    outcome plainly, so there's nothing more to add here."""
+    if row is None or row["status"] == "released":
+        return None
+    status = row["status"]
     if status == "checked_out":
         text = f"Checked Out to {row['checkout_org'] or '—'}"
         if row["checkout_reason"]:
@@ -956,6 +965,7 @@ def case_detail_page(case_code):
         case=row,
         case_code=case_code,
         loc_text=location_text(row),
+        primary_status=primary_status_text(row),
         secondary_status=secondary_status_text(row),
         released_date=released_date,
         checked_out_date=checked_out_date,

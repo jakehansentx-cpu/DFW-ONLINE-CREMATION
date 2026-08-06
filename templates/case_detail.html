@@ -18,9 +18,11 @@
     {% else %}
       <div class="info-form" style="display:block;">
         <label>Status</label>
-        <div style="padding:8px 0; font-size:18px;">{{ case.disposition or "—" }}</div>
+        <div style="padding:8px 0; font-size:18px;">{{ primary_status }}</div>
+        {% if secondary_status %}
         <label>Secondary Status</label>
         <div style="padding:8px 0; font-size:18px;">{{ secondary_status }}</div>
+        {% endif %}
       </div>
     {% endif %}
     {% if case is none %}
