@@ -792,7 +792,19 @@ def run_sheet_sync(db, base_url):
 
         existing = db.execute("SELECT 1 FROM cases WHERE case_code = ?", (case_code,)).fetchone()
         if existing is not None:
-            continue  # already tracked locally, whether via the app or an earlier sync
+            # Already tracked locally -- but the column N link may never
+            # have actually been written (e.g. an earlier sync attempt
+            # got interrupted, or the case was created some other way),
+            # so still make sure it's there before moving on. Without
+            # this, a case that's stuck in that state would be silently
+            # skipped forever instead of ever getting fixed.
+            try:
+                if not _sheets().row_has_case_link(sid, row_num):
+                    target_url = f"{base_url}/case/{quote(case_code, safe='')}"
+                    _sheets().backfill_case_link(sid, row_num, target_url)
+            except Exception:
+                pass
+            continue
 
         pickup_date = parse_date_from_sheet(date_str)
         db.execute(
