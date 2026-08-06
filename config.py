@@ -40,6 +40,14 @@ ACCESS_PASSCODE = "Metro2026"
 # api_case_lookup() in app.py.
 FIELD_TAG_PREFIX = "FIELD-"
 
+# Names shown in the "Who's working?" selector on the scan station. Picking
+# a name there just tags every Assign/Move/Release/Checkout/Check-in action
+# with who did it (stored in the moves table, visible on a case's History) --
+# not a real login, no password. Add/remove staff names here as needed.
+STAFF_NAMES = [
+    "Jake Hansen",
+]
+
 # Google Sheets integration for intake. Set GOOGLE_SHEETS_ENABLED to True
 # once you've done the service account setup (see README) and dropped the
 # downloaded JSON key file in this folder.

@@ -29,6 +29,23 @@ const confirmBox = document.getElementById("confirmBox");
 const confirmMessage = document.getElementById("confirmMessage");
 const confirmYesBtn = document.getElementById("confirmYesBtn");
 const confirmNoBtn = document.getElementById("confirmNoBtn");
+const staffSelect = document.getElementById("staffSelect");
+
+// "Who's working?" is picked once per shift and remembered across page
+// reloads -- not a login, just tags every Assign/Move/Release/Checkout/
+// Check-in action with who did it (see the case History view).
+const STAFF_STORAGE_KEY = "cooler_staff_name";
+const savedStaff = localStorage.getItem(STAFF_STORAGE_KEY);
+if (savedStaff && [...staffSelect.options].some((o) => o.value === savedStaff)) {
+  staffSelect.value = savedStaff;
+}
+staffSelect.addEventListener("change", () => {
+  localStorage.setItem(STAFF_STORAGE_KEY, staffSelect.value);
+});
+
+function getStaffName() {
+  return staffSelect.value;
+}
 
 // Declared here (not down by the rest of the camera code) because
 // resetFlow() calls stopCamera() on every run, including the very first
@@ -341,11 +358,11 @@ async function handleLocationScan(code) {
     return;
   }
   if (mode === "assign" || mode === "sheet-intake" || mode === "checkout") {
-    const result = await postJSON("/api/assign", { case_code: currentCaseCode, location_code: code });
+    const result = await postJSON("/api/assign", { case_code: currentCaseCode, location_code: code, staff: getStaffName() });
     const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
     showStatus(`${currentCaseCode} placed at ${code}.${warning}`, !result.sheet_warning);
   } else if (mode === "move") {
-    await postJSON("/api/move", { case_code: currentCaseCode, location_code: code });
+    await postJSON("/api/move", { case_code: currentCaseCode, location_code: code, staff: getStaffName() });
     showStatus(`${currentCaseCode} moved to ${code}.`, true);
   }
   setTimeout(resetFlow, 1400);
@@ -399,6 +416,7 @@ async function doRelease() {
     const result = await postJSON("/api/release", {
       case_code: currentCaseCode,
       released_to: releasedTo.value,
+      staff: getStaffName(),
     });
     const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
     showStatus(`${currentCaseCode} released.${warning}`, !result.sheet_warning);
@@ -413,6 +431,7 @@ async function doCremate() {
     const result = await postJSON("/api/release", {
       case_code: currentCaseCode,
       cremated: true,
+      staff: getStaffName(),
     });
     const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
     showStatus(`${currentCaseCode} marked as cremated.${warning}`, !result.sheet_warning);
@@ -443,6 +462,7 @@ confirmCheckoutBtn.addEventListener("click", async () => {
       case_code: currentCaseCode,
       organization: checkoutOrg.value,
       reason: checkoutReason.value,
+      staff: getStaffName(),
     });
     const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
     showStatus(`${currentCaseCode} checked out.${warning}`, !result.sheet_warning);
@@ -454,7 +474,7 @@ confirmCheckoutBtn.addEventListener("click", async () => {
 
 confirmCheckinBtn.addEventListener("click", async () => {
   try {
-    const result = await postJSON("/api/checkin", { case_code: currentCaseCode });
+    const result = await postJSON("/api/checkin", { case_code: currentCaseCode, staff: getStaffName() });
     const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
     checkinForm.classList.add("hidden");
     step = "location";

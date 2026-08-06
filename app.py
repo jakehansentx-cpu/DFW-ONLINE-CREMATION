@@ -170,6 +170,7 @@ def init_db():
     _ensure_column(db, "cases", "disposition", "TEXT")
     _ensure_column(db, "cases", "removal_by", "TEXT")
     _ensure_column(db, "cases", "night", "TEXT")
+    _ensure_column(db, "moves", "staff", "TEXT")
     db.commit()
 
     # Ensure every location in config.py exists in the DB, WITHOUT ever
@@ -303,7 +304,7 @@ def get_case_history(db, case_id):
     the moves table, just never surfaced anywhere in the UI until now."""
     rows = db.execute(
         """
-        SELECT m.action, m.timestamp,
+        SELECT m.action, m.timestamp, m.staff,
                fl.cooler_name AS from_cooler, fl.shelf AS from_shelf, fl.slot AS from_slot,
                tl.cooler_name AS to_cooler, tl.shelf AS to_shelf, tl.slot AS to_slot
         FROM moves m
@@ -333,12 +334,10 @@ def get_case_history(db, case_id):
             when = f"{dt.month}/{dt.day}/{dt.year} {dt.strftime('%I:%M %p').lstrip('0')}"
         except ValueError:
             when = m["timestamp"]
-        history.append(
-            {
-                "when": when,
-                "description": describe(m) if describe else m["action"],
-            }
-        )
+        description = describe(m) if describe else m["action"]
+        if m["staff"]:
+            description += f" — {m['staff']}"
+        history.append({"when": when, "description": description})
     return history
 
 
@@ -431,7 +430,7 @@ def board_page():
 @app.route("/scan")
 @login_required
 def scan_page():
-    return render_template("scan.html")
+    return render_template("scan.html", staff_names=config.STAFF_NAMES)
 
 
 @app.route("/case/<case_code>")
@@ -718,6 +717,7 @@ def api_assign():
     data = request.get_json(force=True)
     case_code = data.get("case_code")
     location_code = data.get("location_code")
+    staff = (data.get("staff") or "").strip()
     db = get_db()
 
     case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
@@ -739,8 +739,8 @@ def api_assign():
         (loc["id"], case["id"]),
     )
     db.execute(
-        "INSERT INTO moves (case_id, from_location_id, to_location_id, action, timestamp) VALUES (?, NULL, ?, 'placed', ?)",
-        (case["id"], loc["id"], now()),
+        "INSERT INTO moves (case_id, from_location_id, to_location_id, action, timestamp, staff) VALUES (?, NULL, ?, 'placed', ?, ?)",
+        (case["id"], loc["id"], now(), staff),
     )
     db.commit()
 
@@ -759,6 +759,7 @@ def api_move():
     data = request.get_json(force=True)
     case_code = data.get("case_code")
     location_code = data.get("location_code")
+    staff = (data.get("staff") or "").strip()
     db = get_db()
 
     case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
@@ -778,8 +779,8 @@ def api_move():
     old_loc_id = case["location_id"]
     db.execute("UPDATE cases SET location_id = ? WHERE id = ?", (new_loc["id"], case["id"]))
     db.execute(
-        "INSERT INTO moves (case_id, from_location_id, to_location_id, action, timestamp) VALUES (?, ?, ?, 'moved', ?)",
-        (case["id"], old_loc_id, new_loc["id"], now()),
+        "INSERT INTO moves (case_id, from_location_id, to_location_id, action, timestamp, staff) VALUES (?, ?, ?, 'moved', ?, ?)",
+        (case["id"], old_loc_id, new_loc["id"], now(), staff),
     )
     db.commit()
 
@@ -800,6 +801,7 @@ def api_release():
     case_code = data.get("case_code")
     cremated = bool(data.get("cremated"))
     released_to = "Cremated" if cremated else (data.get("released_to") or "").strip()
+    staff = (data.get("staff") or "").strip()
     db = get_db()
 
     case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
@@ -811,8 +813,8 @@ def api_release():
         (now(), released_to, case["id"]),
     )
     db.execute(
-        "INSERT INTO moves (case_id, from_location_id, to_location_id, action, timestamp) VALUES (?, ?, NULL, 'released', ?)",
-        (case["id"], case["location_id"], now()),
+        "INSERT INTO moves (case_id, from_location_id, to_location_id, action, timestamp, staff) VALUES (?, ?, NULL, 'released', ?, ?)",
+        (case["id"], case["location_id"], now(), staff),
     )
     db.commit()
 
@@ -849,6 +851,7 @@ def api_checkout():
     case_code = data.get("case_code")
     org = (data.get("organization") or "").strip()
     reason = (data.get("reason") or "").strip()
+    staff = (data.get("staff") or "").strip()
     db = get_db()
 
     case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
@@ -866,8 +869,8 @@ def api_checkout():
         (org, reason, checked_out_at, case["id"]),
     )
     db.execute(
-        "INSERT INTO moves (case_id, from_location_id, to_location_id, action, timestamp) VALUES (?, ?, NULL, 'checked_out', ?)",
-        (case["id"], case["location_id"], checked_out_at),
+        "INSERT INTO moves (case_id, from_location_id, to_location_id, action, timestamp, staff) VALUES (?, ?, NULL, 'checked_out', ?, ?)",
+        (case["id"], case["location_id"], checked_out_at, staff),
     )
     db.commit()
 
@@ -897,6 +900,7 @@ def api_checkin():
     fresh location scan, same as any other not-yet-placed case."""
     data = request.get_json(force=True)
     case_code = data.get("case_code")
+    staff = (data.get("staff") or "").strip()
     db = get_db()
 
     case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
@@ -911,8 +915,8 @@ def api_checkin():
         (case["id"],),
     )
     db.execute(
-        "INSERT INTO moves (case_id, from_location_id, to_location_id, action, timestamp) VALUES (?, NULL, NULL, 'checked_in', ?)",
-        (case["id"], now()),
+        "INSERT INTO moves (case_id, from_location_id, to_location_id, action, timestamp, staff) VALUES (?, NULL, NULL, 'checked_in', ?, ?)",
+        (case["id"], now(), staff),
     )
     db.commit()
 

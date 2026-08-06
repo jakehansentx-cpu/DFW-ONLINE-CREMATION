@@ -172,6 +172,17 @@ body {
 .scan-body { padding: 16px; max-width: 520px; margin: 0 auto; }
 .scan-header h1 { font-size: 22px; text-align: center; }
 
+.staff-row {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+  padding: 10px 12px; background: #1a1f26; border-radius: 8px; border: 1px solid #333;
+}
+.staff-row label { font-size: 13px; color: #aab; white-space: nowrap; }
+.staff-row select {
+  flex: 1; font-size: 15px; padding: 8px; border-radius: 6px;
+  border: 1px solid #333; background: #0d1116; color: #fff;
+}
+.staff-row.unset { border-color: rgba(240,183,79,.5); }
+
 .mode-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .mode-btn {
   flex: 1 1 30%; padding: 12px 4px; font-size: 13.5px;
