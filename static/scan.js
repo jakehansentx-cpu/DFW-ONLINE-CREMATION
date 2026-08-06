@@ -108,6 +108,10 @@ sheetSetBtn.addEventListener("click", async () => {
       sheetPanel.classList.remove("hidden");
       sheetPanelMsg.textContent =
         "A new month has started and no new sheet has been auto-detected yet -- paste this month's spreadsheet link below so new intakes go to the right place. Cases already in progress are unaffected.";
+      // This control lives at the bottom of the page (out of the way
+      // day-to-day) -- when it actually needs attention, make sure
+      // that's not missed just because it's out of the initial view.
+      sheetToggleBtn.scrollIntoView({ behavior: "smooth", block: "center" });
     } else {
       sheetPanelMsg.textContent = data.current_sheet_label
         ? `Currently set to "${data.current_sheet_label}". Paste a new link below to switch it.`

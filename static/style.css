@@ -304,6 +304,12 @@ body {
 }
 .reset-row { margin-top: 20px; }
 
+.admin-section {
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid #263042;
+}
+
 .history-list { display: flex; flex-direction: column; gap: 8px; }
 .history-row {
   display: flex; justify-content: space-between; gap: 12px;
