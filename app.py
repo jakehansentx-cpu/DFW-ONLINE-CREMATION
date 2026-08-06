@@ -507,7 +507,46 @@ def get_inventory_items(db, case_id):
     ]
 
 
-def _save_inventory_photo(file_storage):
+def _stamp_inventory_caption(img, case_code, name):
+    """Burns the case number (and decedent name, if known) into the
+    bottom of an inventory photo -- so the photo is still self-
+    identifying even if it ever leaves the app entirely (copied off the
+    Pi, emailed, printed), not just tagged in the database. Shrinks the
+    caption down (and drops the name first, then truncates it) rather
+    than letting it overflow, for unusually long names/case codes."""
+    draw = ImageDraw.Draw(img)
+    font_size = max(16, img.width // 40)
+    max_width = img.width - 16
+
+    def build(with_name, chars):
+        if with_name and name:
+            trimmed = name if chars is None or len(name) <= chars else name[:chars].rstrip() + "..."
+            return f"Case: {case_code}  —  {trimmed}"
+        return f"Case: {case_code}"
+
+    font = _load_font(True, font_size)
+    caption = build(True, None)
+    if draw.textbbox((0, 0), caption, font=font)[2] > max_width:
+        # Try progressively shorter versions of the name before dropping
+        # it entirely -- always keeping the case number intact, since
+        # that's the one piece that must never be cut off.
+        fit = None
+        for chars in (40, 25, 15, 8):
+            candidate = build(True, chars)
+            if draw.textbbox((0, 0), candidate, font=font)[2] <= max_width:
+                fit = candidate
+                break
+        caption = fit or build(False, None)
+
+    padding = 8
+    text_bbox = draw.textbbox((0, 0), caption, font=font)
+    bar_h = (text_bbox[3] - text_bbox[1]) + padding * 2
+    draw.rectangle([0, img.height - bar_h, img.width, img.height], fill=(0, 0, 0))
+    draw.text((padding, img.height - bar_h + padding - text_bbox[1]), caption, font=font, fill=(255, 255, 255))
+    return img
+
+
+def _save_inventory_photo(file_storage, case_code, name):
     """Resizes/re-encodes an uploaded inventory photo to a reasonable
     size before saving -- a raw phone camera photo can be several MB,
     which adds up fast across many items on a Pi's limited storage.
@@ -523,6 +562,7 @@ def _save_inventory_photo(file_storage):
         return None, "That doesn't look like a photo the app can read -- try again."
 
     img.thumbnail((1600, 1600))
+    img = _stamp_inventory_caption(img, case_code, name)
     filename = f"{secrets.token_hex(12)}.jpg"
     img.save(INVENTORY_PHOTOS_PATH / filename, format="JPEG", quality=82)
     return filename, None
@@ -893,7 +933,7 @@ def api_add_inventory(case_code):
     upload), and whoever logged it. One photo per line item -- multiple
     angles of the same item are just multiple lines."""
     db = get_db()
-    case = db.execute("SELECT id FROM cases WHERE case_code = ?", (case_code,)).fetchone()
+    case = db.execute("SELECT id, name FROM cases WHERE case_code = ?", (case_code,)).fetchone()
     if case is None:
         return jsonify(error="Unknown case code"), 404
 
@@ -906,7 +946,7 @@ def api_add_inventory(case_code):
 
     photo_filename = None
     if photo and photo.filename:
-        photo_filename, err = _save_inventory_photo(photo)
+        photo_filename, err = _save_inventory_photo(photo, case_code, case["name"])
         if err:
             return jsonify(error=err), 400
 
