@@ -74,6 +74,20 @@ GOOGLE_SERVICE_ACCOUNT_FILE = "service_account.json"
 GOOGLE_SHEET_ID = "1QzFHSraw7OTfJKp-UrP0nSpZJB5WxgLUPadiWiNLVbE"  # "JULY CALL LOG"
 GOOGLE_SHEET_TAB = ""  # leave blank unless you have multiple tabs and need a specific one
 
+# Where this app is reachable from -- used to build the case link written
+# into column N when the automatic background sync (see
+# _background_sync_loop in app.py) picks up a manually-typed sheet row,
+# since there's no browser request to read a host name from at that
+# point. Same address gen_field_tags.py already uses for printed tags.
+PUBLIC_HOST = "https://137.119.230.213:5000"
+
+# How often (in minutes) the app automatically checks the current sheet
+# for decedents typed straight in (bypassing the scan station) and syncs
+# them in on its own -- same thing the "Sync Manual Entries From Sheet"
+# button does by hand, just running on a timer so nobody has to remember
+# to press it.
+SHEET_SYNC_INTERVAL_MINUTES = 5
+
 COOLERS = [
     {
         "name": "Metro Large Cooler",

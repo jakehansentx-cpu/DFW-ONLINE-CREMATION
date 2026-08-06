@@ -83,6 +83,12 @@ locally yet, creates a record for it, and lists a Print Tag link for
 each one found -- run it any time (safe to run repeatedly) and print a
 tag for everything it finds.
 
+This also runs **automatically in the background** every
+`config.SHEET_SYNC_INTERVAL_MINUTES` (default 5) -- nobody has to
+remember to press the button. The link in column N shows up within a
+few minutes of typing a decedent's info into the sheet either way; the
+button is just there for "I want it right now."
+
 ## Setup (one time)
 
 1. Install Python 3.10+ on the host machine.

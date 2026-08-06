@@ -15,9 +15,12 @@ import csv
 import io
 import sqlite3
 import secrets
+import threading
+import time
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
+from urllib.parse import quote
 from flask import Flask, g, jsonify, render_template, request, session, redirect, url_for
 
 import qrcode
@@ -757,9 +760,7 @@ def api_set_sheet():
     return jsonify(ok=True, sheet_id=sheet_id, label=label)
 
 
-@app.route("/api/sheet-sync", methods=["POST"])
-@login_required
-def api_sheet_sync():
+def run_sheet_sync(db, base_url):
     """
     Picks up decedents staff typed straight into the spreadsheet instead
     of going through the app. Some staff prefer entering name/date/
@@ -771,16 +772,13 @@ def api_sheet_sync():
     yet, creates one for each, and writes the case link back to column N
     so it behaves exactly like an app-driven intake from here on. Safe
     to run repeatedly -- already-tracked rows are skipped every time.
-    """
-    if not config.GOOGLE_SHEETS_ENABLED:
-        return jsonify(error="Google Sheets isn't turned on yet (see config.py)"), 400
 
-    db = get_db()
+    Shared by the on-demand /api/sheet-sync route (base_url from the
+    live request) and the automatic background loop (base_url from
+    config.PUBLIC_HOST, since there's no request to read one from there).
+    """
     sid = current_sheet_id(db)
-    try:
-        rows = _sheets().read_rows(sid)
-    except Exception as e:
-        return jsonify(error=f"Couldn't reach the spreadsheet: {e}"), 502
+    rows = _sheets().read_rows(sid)
 
     synced = []
     for row_num, cols in rows:
@@ -812,14 +810,55 @@ def api_sheet_sync():
 
         try:
             if not _sheets().row_has_case_link(sid, row_num):
-                target_url = request.host_url.rstrip("/") + url_for("case_detail_page", case_code=case_code)
+                target_url = f"{base_url}/case/{quote(case_code, safe='')}"
                 _sheets().backfill_case_link(sid, row_num, target_url)
         except Exception:
             pass  # the local record is what matters -- the sheet link is a convenience shortcut
 
         synced.append({"case_code": case_code, "name": name or None})
 
+    return synced
+
+
+@app.route("/api/sheet-sync", methods=["POST"])
+@login_required
+def api_sheet_sync():
+    """On-demand version of run_sheet_sync -- the scan station's
+    "Sync Manual Entries From Sheet" button. See _background_sync_loop
+    for the automatic version that runs on its own timer."""
+    if not config.GOOGLE_SHEETS_ENABLED:
+        return jsonify(error="Google Sheets isn't turned on yet (see config.py)"), 400
+
+    db = get_db()
+    try:
+        synced = run_sheet_sync(db, request.host_url.rstrip("/"))
+    except Exception as e:
+        return jsonify(error=f"Couldn't reach the spreadsheet: {e}"), 502
+
     return jsonify(ok=True, synced=synced)
+
+
+def _background_sync_loop():
+    """Runs run_sheet_sync automatically every
+    config.SHEET_SYNC_INTERVAL_MINUTES, so a decedent typed straight into
+    the sheet gets an armband tag/QR/board tracking within a few minutes
+    even if nobody remembers to press the Sync button. Own thread, own
+    DB connection -- Flask's request-scoped get_db() isn't usable outside
+    an actual request."""
+    while True:
+        time.sleep(config.SHEET_SYNC_INTERVAL_MINUTES * 60)
+        if not config.GOOGLE_SHEETS_ENABLED:
+            continue
+        try:
+            db = sqlite3.connect(DB_PATH)
+            db.row_factory = sqlite3.Row
+            synced = run_sheet_sync(db, config.PUBLIC_HOST)
+            db.close()
+            if synced:
+                codes = ", ".join(c["case_code"] for c in synced)
+                print(f"[auto-sync] picked up {len(synced)} manually-entered case(s): {codes}")
+        except Exception as e:
+            print(f"[auto-sync] failed: {e}")
 
 
 @app.route("/case/<case_code>")
@@ -1793,6 +1832,8 @@ if __name__ == "__main__":
     import sys
 
     init_db()
+    if config.GOOGLE_SHEETS_ENABLED:
+        threading.Thread(target=_background_sync_loop, daemon=True).start()
     use_https = "--https" in sys.argv
     ssl_ctx = _ensure_https_cert() if use_https else None
     if use_https:
