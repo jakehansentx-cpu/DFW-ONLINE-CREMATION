@@ -154,11 +154,13 @@ body {
   border-top: 1px solid #333; padding-top: 10px; margin-top: 10px;
 }
 .detail-card .case-qr-row {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  margin-bottom: 8px;
 }
-.detail-card .case-line { margin: 0; }
+.detail-card .case-line { margin: 0; text-align: center; }
 .detail-card .case-qr-thumb {
-  width: 60px; height: 60px; background: #fff; padding: 3px; border-radius: 4px; flex-shrink: 0;
+  width: 240px; height: 240px; max-width: 100%;
+  background: #fff; padding: 10px; border-radius: 8px; flex-shrink: 0;
 }
 .detail-card .save-occupant-btn {
   margin-top: 10px; padding: 10px; font-size: 14px; width: 100%;
