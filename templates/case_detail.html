@@ -49,6 +49,20 @@
       </div>
     {% endif %}
 
+    {% if flags %}
+      <div class="info-form" style="display:block; margin-top:16px;">
+        <h3 style="margin-top:0;">Status</h3>
+        <div class="history-list">
+          {% for f in flags %}
+            <div class="history-row">
+              <span>{{ f.flag }}</span>
+              <span class="history-desc">{{ "Yes" if f.value == true else ("No" if f.value == false else "Not yet marked") }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
     {% if history %}
       <div class="info-form" style="display:block; margin-top:16px;">
         <h3 style="margin-top:0;">History</h3>

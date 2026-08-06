@@ -191,6 +191,15 @@ def init_db():
             key TEXT PRIMARY KEY,
             value TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS case_events (
+            id INTEGER PRIMARY KEY,
+            case_id INTEGER NOT NULL REFERENCES cases(id),
+            flag TEXT NOT NULL,     -- e.g. "Prepped", "Witness Cremation" -- see config.CASE_FLAGS
+            value INTEGER NOT NULL, -- 1 = Yes, 0 = No
+            timestamp TEXT NOT NULL,
+            staff TEXT
+        );
         """
     )
     # Migrate DBs created before these columns existed.
@@ -382,11 +391,21 @@ def _move_location_text(cooler, shelf, slot):
     return f"{cooler} - Shelf {shelf}{slot or ''}"
 
 
+def _format_when(timestamp):
+    try:
+        dt = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+        return f"{dt.month}/{dt.day}/{dt.year} {dt.strftime('%I:%M %p').lstrip('0')}"
+    except ValueError:
+        return timestamp
+
+
 def get_case_history(db, case_id):
     """Full chronological chain of custody for a case -- every
-    placed/moved/released/checked_out/checked_in action already logged in
-    the moves table, just never surfaced anywhere in the UI until now."""
-    rows = db.execute(
+    placed/moved/released/checked_out/checked_in action from the moves
+    table, merged with every Prepped/Witness Cremation/ID Viewing/etc.
+    status change logged in case_events (see config.CASE_FLAGS), so the
+    History view is one combined timeline instead of two separate ones."""
+    move_rows = db.execute(
         """
         SELECT m.action, m.timestamp, m.staff, m.disk_number,
                fl.cooler_name AS from_cooler, fl.shelf AS from_shelf, fl.slot AS from_slot,
@@ -416,19 +435,44 @@ def get_case_history(db, case_id):
         "checked_out": lambda m: f"Checked out from {_move_location_text(m['from_cooler'], m['from_shelf'], m['from_slot'])}",
         "checked_in": lambda m: "Checked in",
     }
-    history = []
-    for m in rows:
+
+    entries = []
+    for m in move_rows:
         describe = descriptions.get(m["action"])
-        try:
-            dt = datetime.strptime(m["timestamp"], "%Y-%m-%d %H:%M:%S")
-            when = f"{dt.month}/{dt.day}/{dt.year} {dt.strftime('%I:%M %p').lstrip('0')}"
-        except ValueError:
-            when = m["timestamp"]
         description = describe(m) if describe else m["action"]
         if m["staff"]:
             description += f" — {m['staff']}"
-        history.append({"when": when, "description": description})
-    return history
+        entries.append((m["timestamp"], description))
+
+    event_rows = db.execute(
+        "SELECT flag, value, timestamp, staff FROM case_events WHERE case_id = ? ORDER BY id ASC",
+        (case_id,),
+    ).fetchall()
+    for e in event_rows:
+        description = f"{e['flag']}: {'Yes' if e['value'] else 'No'}"
+        if e["staff"]:
+            description += f" — {e['staff']}"
+        entries.append((e["timestamp"], description))
+
+    entries.sort(key=lambda entry: entry[0])
+    return [{"when": _format_when(ts), "description": desc} for ts, desc in entries]
+
+
+def get_case_flags(db, case_id):
+    """Current Yes/No state of each configured decedent status flag
+    (config.CASE_FLAGS), in config order -- a plain dict would work
+    locally, but jsonify() sorts dict keys alphabetically by default,
+    which would silently scramble the display order away from what
+    config.py defines. A list preserves it. Value is whichever was
+    logged most recently in case_events, or None if never set."""
+    flags = []
+    for flag in config.CASE_FLAGS:
+        row = db.execute(
+            "SELECT value FROM case_events WHERE case_id = ? AND flag = ? ORDER BY id DESC LIMIT 1",
+            (case_id, flag),
+        ).fetchone()
+        flags.append({"flag": flag, "value": bool(row["value"]) if row is not None else None})
+    return flags
 
 
 def generate_qr_png(data):
@@ -670,6 +714,7 @@ def case_detail_page(case_code):
     if row is not None and row["status"] == "checked_out" and row["checked_out_at"]:
         checked_out_date = format_date_for_sheet(row["checked_out_at"].split(" ")[0])
     history = get_case_history(db, row["id"]) if row is not None else []
+    flags = get_case_flags(db, row["id"]) if row is not None else {}
     return render_template(
         "case_detail.html",
         case=row,
@@ -678,6 +723,61 @@ def case_detail_page(case_code):
         released_date=released_date,
         checked_out_date=checked_out_date,
         history=history,
+        flags=flags,
+    )
+
+
+@app.route("/api/case/<case_code>/history")
+@login_required
+def api_case_history(case_code):
+    """Combined chronological history + current status flags for one
+    decedent -- backs the board's History popup (see board.js)."""
+    db = get_db()
+    row = get_case_with_location(db, case_code)
+    if row is None:
+        return jsonify(error="Unknown case code"), 404
+    return jsonify(
+        case_code=row["case_code"],
+        name=row["name"],
+        funeral_home=row["funeral_home"],
+        status=row["status"],
+        location_text=location_text(row),
+        history=get_case_history(db, row["id"]),
+        flags=get_case_flags(db, row["id"]),
+    )
+
+
+@app.route("/api/case/<case_code>/flag", methods=["POST"])
+@login_required
+def api_set_case_flag(case_code):
+    """Logs a Yes/No status flag change (Prepped, Witness Cremation, ID
+    Viewing, ... -- see config.CASE_FLAGS) for a decedent. Each change is
+    its own timestamped, staff-attributed case_events row rather than an
+    overwrite, so the full history of when it changed (and who changed
+    it) is never lost."""
+    data = request.get_json(force=True)
+    flag = (data.get("flag") or "").strip()
+    value = bool(data.get("value"))
+    staff = (data.get("staff") or "").strip()
+
+    if flag not in config.CASE_FLAGS:
+        return jsonify(error="Unknown status flag"), 400
+
+    db = get_db()
+    case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
+    if case is None:
+        return jsonify(error="Unknown case code"), 404
+
+    db.execute(
+        "INSERT INTO case_events (case_id, flag, value, timestamp, staff) VALUES (?, ?, ?, ?, ?)",
+        (case["id"], flag, int(value), now(), staff),
+    )
+    db.commit()
+
+    return jsonify(
+        ok=True,
+        history=get_case_history(db, case["id"]),
+        flags=get_case_flags(db, case["id"]),
     )
 
 

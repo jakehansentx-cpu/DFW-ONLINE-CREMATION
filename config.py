@@ -48,6 +48,17 @@ STAFF_NAMES = [
     "Jake Hansen",
 ]
 
+# Extra decedent status flags shown as Yes/No toggles in the board's
+# History popup (see config.CASE_FLAGS in app.py) -- each one just logs a
+# timestamped "<flag>: Yes/No" entry to that decedent's history, tagged
+# with whoever set it. Add or remove entries here as your workflow
+# changes; no other code changes needed.
+CASE_FLAGS = [
+    "Prepped",
+    "Witness Cremation",
+    "ID Viewing",
+]
+
 # Google Sheets integration for intake. Set GOOGLE_SHEETS_ENABLED to True
 # once you've done the service account setup (see README) and dropped the
 # downloaded JSON key file in this folder.

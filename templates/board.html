@@ -10,6 +10,7 @@
     <h1>Cooler Status</h1>
     <div style="display:flex; align-items:center; gap:18px;">
       <button id="moveModeBtn" class="export-btn">📍 Move</button>
+      <button id="historyModeBtn" class="export-btn">🕐 History</button>
       <a class="export-btn" href="{{ url_for('api_board_export') }}" style="text-decoration:none;">Export CSV</a>
       <div id="clock"></div>
       <a href="/logout" style="color:#889; font-size:13px;">Log out</a>
@@ -54,6 +55,13 @@
     <div class="detail-card">
       <button id="closeDetail" class="close-btn">&times;</button>
       <div id="detailContent"></div>
+    </div>
+  </div>
+
+  <div id="historyOverlay" class="detail-overlay hidden">
+    <div class="detail-card">
+      <button id="closeHistory" class="close-btn">&times;</button>
+      <div id="historyContent"></div>
     </div>
   </div>
 

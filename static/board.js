@@ -107,11 +107,44 @@ moveModeBtn.addEventListener("click", () => {
   moveModeBtn.classList.toggle("active", moveMode);
   resetMoveSelection();
   if (moveMode) {
+    historyMode = false;
+    historyModeBtn.classList.remove("active");
     showMoveStatus("Move mode on -- tap an occupied shelf to move.", true);
   } else {
     moveStatus.classList.add("hidden");
   }
   renderBoard(latestRows);
+});
+
+// ---------------- Touchscreen tap-for-history ----------------
+// Same idea as Move mode: arm it, then tap a shelf. Instead of selecting
+// a source/destination pair, a single tap just pops up that decedent's
+// full history (every placed/moved/released/checked-out/checked-in
+// event, plus the Prepped/Witness Cremation/ID Viewing/etc. status
+// flags from config.CASE_FLAGS) -- a quick way to answer "when did we
+// get them, who picked them up, has X happened yet" without opening the
+// full edit/move/release popup.
+let historyMode = false;
+const historyModeBtn = document.getElementById("historyModeBtn");
+const historyOverlay = document.getElementById("historyOverlay");
+const historyContent = document.getElementById("historyContent");
+
+historyModeBtn.addEventListener("click", () => {
+  historyMode = !historyMode;
+  historyModeBtn.classList.toggle("active", historyMode);
+  if (historyMode) {
+    moveMode = false;
+    moveModeBtn.classList.remove("active");
+    resetMoveSelection();
+    showMoveStatus("History mode on -- tap a shelf to view that decedent's history.", true);
+  } else {
+    moveStatus.classList.add("hidden");
+  }
+  renderBoard(latestRows);
+});
+
+document.getElementById("closeHistory").addEventListener("click", () => {
+  historyOverlay.classList.add("hidden");
 });
 
 async function handleMoveTap(loc, coolerName, shelfNum) {
@@ -306,7 +339,11 @@ function renderBoard(rows) {
             cell.classList.add("move-selected");
           }
           cell.addEventListener("click", () => {
-            if (moveMode) {
+            if (historyMode) {
+              cell.classList.add("search-highlight");
+              setTimeout(() => cell.classList.remove("search-highlight"), 1200);
+              showHistory(loc, cooler.name, shelfNum);
+            } else if (moveMode) {
               handleMoveTap(loc, cooler.name, shelfNum);
             } else {
               showDetail(loc, cooler.name, shelfNum);
@@ -610,6 +647,105 @@ function occupantNameFor(caseCode, loc) {
 document.getElementById("closeDetail").addEventListener("click", () => {
   document.getElementById("detail").classList.add("hidden");
 });
+
+// ---------------- History popup ----------------
+function renderHistoryBlock(caseCode, name, data) {
+  const flagRows = data.flags
+    .map(({ flag, value }) => {
+      const yesClass = value === true ? "active-yes" : "";
+      const noClass = value === false ? "active-no" : "";
+      return `
+        <div class="history-flag-row">
+          <span>${escapeHtml(flag)}</span>
+          <div class="history-flag-btns">
+            <button class="flag-toggle-btn ${yesClass}" data-case="${escapeHtml(caseCode)}" data-flag="${escapeHtml(flag)}" data-value="1">Yes</button>
+            <button class="flag-toggle-btn ${noClass}" data-case="${escapeHtml(caseCode)}" data-flag="${escapeHtml(flag)}" data-value="0">No</button>
+          </div>
+        </div>`;
+    })
+    .join("");
+
+  const historyRows = data.history.length
+    ? data.history
+        .map(
+          (h) => `
+        <div class="history-row">
+          <span class="history-when">${escapeHtml(h.when)}</span>
+          <span class="history-desc">${escapeHtml(h.description)}</span>
+        </div>`
+        )
+        .join("")
+    : `<p style="color:#889; margin:0;">No history yet.</p>`;
+
+  return `
+    <div class="occupant-block" data-history-case="${escapeHtml(caseCode)}">
+      <h3 style="margin-top:0;">${escapeHtml(name || caseCode)}</h3>
+      <p class="case-line"><b>Case:</b> ${escapeHtml(caseCode)}</p>
+      <div class="history-flags">${flagRows}</div>
+      <h3>History</h3>
+      <div class="history-list">${historyRows}</div>
+    </div>`;
+}
+
+async function showHistory(loc, coolerName, shelfNum) {
+  const overlay = historyOverlay;
+  const content = historyContent;
+  const where = `${coolerName} — Shelf ${shelfNum}${loc.slot ? loc.slot : ""}`;
+
+  if (loc.occupants.length === 0) {
+    content.innerHTML = `<h2>${escapeHtml(where)}</h2><p>Empty</p>`;
+    overlay.classList.remove("hidden");
+    return;
+  }
+
+  content.innerHTML = `<h2>${escapeHtml(where)}</h2><p style="color:#889;">Loading history...</p>`;
+  overlay.classList.remove("hidden");
+
+  const results = await Promise.all(
+    loc.occupants.map((o) =>
+      fetch(`/api/case/${encodeURIComponent(o.case_code)}/history`).then((r) => r.json())
+    )
+  );
+
+  content.innerHTML =
+    `<h2>${escapeHtml(where)}</h2>` +
+    results.map((data, i) => renderHistoryBlock(loc.occupants[i].case_code, data.name, data)).join("");
+
+  wireFlagButtons(content, loc);
+}
+
+// Delegated on `content` itself (rather than bound per-button) so
+// re-rendering one occupant's block after a toggle -- which replaces
+// that block's markup wholesale -- never leaves stale/missing listeners
+// on the buttons inside it.
+function wireFlagButtons(content, loc) {
+  if (content._flagClickWired) return;
+  content._flagClickWired = true;
+  content.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".flag-toggle-btn");
+    if (!btn || !content.contains(btn)) return;
+    const caseCode = btn.dataset.case;
+    const flag = btn.dataset.flag;
+    const value = btn.dataset.value === "1";
+    btn.disabled = true;
+    try {
+      const res = await fetch(`/api/case/${encodeURIComponent(caseCode)}/flag`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ flag, value, staff: getStaffName() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Couldn't update status");
+      const block = content.querySelector(`.occupant-block[data-history-case="${CSS.escape(caseCode)}"]`);
+      const name = occupantNameFor(caseCode, loc);
+      block.outerHTML = renderHistoryBlock(caseCode, name, data);
+    } catch (err) {
+      showMoveStatus(err.message, false);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
 
 // ---------------- Checked-out list / Check In ----------------
 // Checked-out decedents hold no shelf/slot, so they never appear in the

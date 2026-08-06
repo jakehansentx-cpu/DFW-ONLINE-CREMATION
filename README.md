@@ -202,6 +202,27 @@ Without either of those, Field Intake still works exactly as described
 above — it just uploads on a delay (until the phone's back on the LAN)
 instead of instantly. No case data is ever lost either way.
 
+## History mode on the board
+
+The board has a "🕐 History" button next to "📍 Move" -- tap it, then tap
+any occupied shelf to pop up that decedent's full history: when they were
+placed, every move between shelves, release/checkout/check-in events, and
+Yes/No status flags (Prepped, Witness Cremation, ID Viewing) that staff can
+toggle right from that popup. Every toggle is logged with a timestamp and
+whoever set it, same as any other action.
+
+Add or remove status flags in `config.py`:
+```python
+CASE_FLAGS = [
+    "Prepped",
+    "Witness Cremation",
+    "ID Viewing",
+]
+```
+No other code changes needed -- a flag just starts showing up as a new
+Yes/No toggle in the History popup (and on a case's own `/case/<code>`
+page) the next time the app restarts.
+
 ## Layout config: coolers and shelves
 
 The system is organized as **cooler → shelf → optional A/B slot**, no more

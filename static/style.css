@@ -216,6 +216,19 @@ body {
   padding: 24px 32px; max-width: 380px; text-align: center; font-size: 16px; line-height: 1.5;
 }
 
+.detail-card .history-flag-row {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 10px; padding: 8px 0; border-bottom: 1px solid #263042; font-size: 14px;
+}
+.detail-card .history-flag-row:last-child { border-bottom: none; }
+.detail-card .history-flag-btns { display: flex; gap: 6px; }
+.detail-card .flag-toggle-btn {
+  padding: 6px 14px; font-size: 13px; border: 1px solid #333; border-radius: 6px;
+  background: #0d1116; color: #ccc;
+}
+.detail-card .flag-toggle-btn.active-yes { background: #1f3d2b; border-color: #2f6a45; color: #7fd99a; }
+.detail-card .flag-toggle-btn.active-no { background: #4a1d1d; border-color: #7a3030; color: #ff9d9d; }
+
 /* ---------------- Scan (tablet) ---------------- */
 .scan-body { padding: 16px; max-width: 520px; margin: 0 auto; }
 .scan-header h1 { font-size: 22px; text-align: center; }
