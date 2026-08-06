@@ -135,17 +135,25 @@ body {
   background: #1a1f26;
   border: 2px solid #444;
   border-radius: 10px;
-  padding: 24px 32px;
   min-width: 320px;
   max-width: min(92vw, 480px);
   max-height: 88vh;
-  overflow-y: auto;
   position: relative;
   font-size: 18px;
   line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+}
+/* Scrolls independently of .close-btn, which stays pinned in the corner
+   so it's still reachable after scrolling down through long content. */
+.detail-card-body {
+  padding: 24px 32px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: none;
 }
 .close-btn {
-  position: absolute; top: 8px; right: 12px;
+  position: absolute; top: 8px; right: 12px; z-index: 1;
   background: none; border: none; color: #f2f2f2; font-size: 24px; cursor: pointer;
 }
 .detail-card label { display: block; margin-top: 10px; font-size: 13px; color: #aab; }
@@ -216,7 +224,9 @@ body {
 .board-confirm-overlay.hidden { display: none; }
 .board-confirm-card {
   background: #1a1f26; border: 2px solid #444; border-radius: 10px;
-  padding: 24px 32px; max-width: 380px; text-align: center; font-size: 16px; line-height: 1.5;
+  padding: 24px 32px; max-width: min(92vw, 380px); max-height: 88vh;
+  overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: none;
+  text-align: center; font-size: 16px; line-height: 1.5;
 }
 
 .detail-card .history-flag-row {

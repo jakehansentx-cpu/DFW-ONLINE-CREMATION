@@ -19,6 +19,32 @@ function formatDate(datetimeStr) {
   return `${m}/${d}/${String(y).slice(2)}`;
 }
 
+// Touchscreens on the Pi report as mouse-emulated pointers, so plain CSS
+// overflow-y scrolling doesn't respond to a finger drag -- drive scrollTop
+// from pointer events instead (same approach the signature pad already
+// uses). Skip drag-starts on interactive controls so taps/typing/canvas
+// drawing still work normally.
+function enableDragScroll(el) {
+  let dragging = false;
+  let startY = 0;
+  let startScrollTop = 0;
+  el.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("input, select, textarea, button, canvas, a")) return;
+    dragging = true;
+    startY = e.clientY;
+    startScrollTop = el.scrollTop;
+    el.setPointerCapture(e.pointerId);
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    el.scrollTop = startScrollTop - (e.clientY - startY);
+  });
+  const stopDrag = () => { dragging = false; };
+  el.addEventListener("pointerup", stopDrag);
+  el.addEventListener("pointercancel", stopDrag);
+}
+document.querySelectorAll(".detail-card-body, .board-confirm-card").forEach(enableDragScroll);
+
 let latestRows = [];
 let currentScreen = null;
 
