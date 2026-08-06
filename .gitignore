@@ -6,3 +6,4 @@ field_tags.pdf
 __pycache__/
 *.pyc
 .venv/
+inventory_photos/

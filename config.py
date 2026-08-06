@@ -59,6 +59,13 @@ CASE_FLAGS = [
     "ID Viewing",
 ]
 
+# Where personal-effects inventory photos (jewelry, clothing, phone,
+# paperwork, etc.) get saved on disk -- created automatically if it
+# doesn't exist yet. Not under static/ on purpose, since photos are
+# served through a login-gated route rather than served as plain
+# static files.
+INVENTORY_PHOTOS_DIR = "inventory_photos"
+
 # Google Sheets integration for intake. Set GOOGLE_SHEETS_ENABLED to True
 # once you've done the service account setup (see README) and dropped the
 # downloaded JSON key file in this folder.

@@ -223,6 +223,20 @@ No other code changes needed -- a flag just starts showing up as a new
 Yes/No toggle in the History popup (and on a case's own `/case/<code>`
 page) the next time the app restarts.
 
+## Personal effects inventory
+
+The scan station has an "Inventory" mode: scan any case tag, then log
+personal effects (jewelry, clothing, phone, paperwork, etc.) as a
+description, a photo, or both. Photos come from the device's own camera
+button (`<input capture>`) -- no custom camera UI needed -- and are
+automatically resized/re-encoded to keep file sizes reasonable on a
+Pi's storage. Each entry is timestamped and attributed to whoever
+logged it, deletable for corrections, and also shown read-only on that
+case's own `/case/<code>` page. Photos are saved to
+`inventory_photos/` (gitignored -- never committed) rather than in the
+database, and served through a login-gated route rather than as plain
+static files.
+
 ## Layout config: coolers and shelves
 
 The system is organized as **cooler → shelf → optional A/B slot**, no more

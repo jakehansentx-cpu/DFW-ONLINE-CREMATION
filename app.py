@@ -27,6 +27,8 @@ import config
 
 app = Flask(__name__)
 DB_PATH = "cooler.db"
+INVENTORY_PHOTOS_PATH = Path(config.INVENTORY_PHOTOS_DIR)
+INVENTORY_PHOTOS_PATH.mkdir(exist_ok=True)
 
 
 def _sheets():
@@ -198,6 +200,15 @@ def init_db():
             flag TEXT NOT NULL,     -- e.g. "Prepped", "Witness Cremation" -- see config.CASE_FLAGS
             value INTEGER NOT NULL, -- 1 = Yes, 0 = No
             timestamp TEXT NOT NULL,
+            staff TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS inventory_items (
+            id INTEGER PRIMARY KEY,
+            case_id INTEGER NOT NULL REFERENCES cases(id),
+            description TEXT,
+            photo_filename TEXT,  -- filename under config.INVENTORY_PHOTOS_DIR, or NULL
+            created_at TEXT NOT NULL,
             staff TEXT
         );
         """
@@ -475,6 +486,48 @@ def get_case_flags(db, case_id):
     return flags
 
 
+def get_inventory_items(db, case_id):
+    """Personal-effects inventory (jewelry, clothing, phone, paperwork,
+    etc.) logged for a decedent -- oldest first, same order staff added
+    them in."""
+    rows = db.execute(
+        "SELECT id, description, photo_filename, created_at, staff FROM inventory_items "
+        "WHERE case_id = ? ORDER BY id ASC",
+        (case_id,),
+    ).fetchall()
+    return [
+        {
+            "id": r["id"],
+            "description": r["description"],
+            "has_photo": bool(r["photo_filename"]),
+            "when": _format_when(r["created_at"]),
+            "staff": r["staff"],
+        }
+        for r in rows
+    ]
+
+
+def _save_inventory_photo(file_storage):
+    """Resizes/re-encodes an uploaded inventory photo to a reasonable
+    size before saving -- a raw phone camera photo can be several MB,
+    which adds up fast across many items on a Pi's limited storage.
+    Always re-encoded as JPEG under a random filename (never the
+    original name/extension), which also strips EXIF metadata and
+    sidesteps format quirks (HEIC, odd orientation, etc). Returns the
+    saved filename, or None (with an error message) if the upload
+    couldn't be read as an image at all."""
+    try:
+        img = Image.open(file_storage.stream)
+        img = img.convert("RGB")
+    except Exception:
+        return None, "That doesn't look like a photo the app can read -- try again."
+
+    img.thumbnail((1600, 1600))
+    filename = f"{secrets.token_hex(12)}.jpg"
+    img.save(INVENTORY_PHOTOS_PATH / filename, format="JPEG", quality=82)
+    return filename, None
+
+
 def generate_qr_png(data):
     qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=2)
     qr.add_data(data)
@@ -715,6 +768,7 @@ def case_detail_page(case_code):
         checked_out_date = format_date_for_sheet(row["checked_out_at"].split(" ")[0])
     history = get_case_history(db, row["id"]) if row is not None else []
     flags = get_case_flags(db, row["id"]) if row is not None else {}
+    inventory = get_inventory_items(db, row["id"]) if row is not None else []
     return render_template(
         "case_detail.html",
         case=row,
@@ -724,6 +778,7 @@ def case_detail_page(case_code):
         checked_out_date=checked_out_date,
         history=history,
         flags=flags,
+        inventory=inventory,
     )
 
 
@@ -779,6 +834,93 @@ def api_set_case_flag(case_code):
         history=get_case_history(db, case["id"]),
         flags=get_case_flags(db, case["id"]),
     )
+
+
+@app.route("/api/case/<case_code>/inventory")
+@login_required
+def api_list_inventory(case_code):
+    """Personal-effects inventory (jewelry, clothing, phone, paperwork,
+    etc.) logged for a decedent -- backs the scan station's Inventory
+    mode and the read-only list on a case's own page."""
+    db = get_db()
+    case = db.execute("SELECT id FROM cases WHERE case_code = ?", (case_code,)).fetchone()
+    if case is None:
+        return jsonify(error="Unknown case code"), 404
+    return jsonify(items=get_inventory_items(db, case["id"]))
+
+
+@app.route("/api/case/<case_code>/inventory", methods=["POST"])
+@login_required
+def api_add_inventory(case_code):
+    """Adds one inventory line item: a description, an optional photo
+    (attached as multipart form data, not JSON, since it's a file
+    upload), and whoever logged it. One photo per line item -- multiple
+    angles of the same item are just multiple lines."""
+    db = get_db()
+    case = db.execute("SELECT id FROM cases WHERE case_code = ?", (case_code,)).fetchone()
+    if case is None:
+        return jsonify(error="Unknown case code"), 404
+
+    description = (request.form.get("description") or "").strip()
+    staff = (request.form.get("staff") or "").strip()
+    photo = request.files.get("photo")
+
+    if not description and not (photo and photo.filename):
+        return jsonify(error="Enter a description or attach a photo"), 400
+
+    photo_filename = None
+    if photo and photo.filename:
+        photo_filename, err = _save_inventory_photo(photo)
+        if err:
+            return jsonify(error=err), 400
+
+    db.execute(
+        "INSERT INTO inventory_items (case_id, description, photo_filename, created_at, staff) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (case["id"], description or None, photo_filename, now(), staff),
+    )
+    db.commit()
+
+    return jsonify(ok=True, items=get_inventory_items(db, case["id"]))
+
+
+@app.route("/api/inventory/<int:item_id>/delete", methods=["POST"])
+@login_required
+def api_delete_inventory(item_id):
+    """Removes one inventory line item (and its photo file, if any) --
+    for correcting a mis-typed or duplicate entry."""
+    db = get_db()
+    item = db.execute("SELECT * FROM inventory_items WHERE id = ?", (item_id,)).fetchone()
+    if item is None:
+        return jsonify(error="Unknown inventory item"), 404
+
+    if item["photo_filename"]:
+        photo_path = INVENTORY_PHOTOS_PATH / item["photo_filename"]
+        photo_path.unlink(missing_ok=True)
+
+    db.execute("DELETE FROM inventory_items WHERE id = ?", (item_id,))
+    db.commit()
+
+    return jsonify(ok=True, items=get_inventory_items(db, item["case_id"]))
+
+
+@app.route("/api/inventory/<int:item_id>/photo")
+@login_required
+def inventory_photo(item_id):
+    """Serves one inventory item's photo, looked up by item id rather
+    than a raw filename in the URL -- a real route (not static/) so it
+    stays behind the same passcode gate as everything else, since these
+    can show personal effects like ID cards or documents."""
+    db = get_db()
+    item = db.execute(
+        "SELECT photo_filename FROM inventory_items WHERE id = ?", (item_id,)
+    ).fetchone()
+    if item is None or not item["photo_filename"]:
+        return jsonify(error="No photo for this item"), 404
+    photo_path = INVENTORY_PHOTOS_PATH / item["photo_filename"]
+    if not photo_path.is_file():
+        return jsonify(error="Photo file missing"), 404
+    return app.response_class(photo_path.read_bytes(), mimetype="image/jpeg")
 
 
 @app.route("/case/<case_code>/print")

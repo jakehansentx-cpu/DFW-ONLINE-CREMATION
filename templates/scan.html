@@ -47,6 +47,7 @@
     <button class="mode-btn" data-mode="release">Release</button>
     <button class="mode-btn" data-mode="cremate">Cremate</button>
     <button class="mode-btn" data-mode="checkout">Check Out / In (Temp)</button>
+    <button class="mode-btn" data-mode="inventory">Inventory</button>
   </div>
 
   <div id="pendingBadge" class="pending-badge hidden"></div>
@@ -144,6 +145,18 @@
     <h3 id="checkinFormTitle">Check In Decedent</h3>
     <div id="checkinInfo" style="padding:8px 0; color:#aab;"></div>
     <button id="confirmCheckinBtn" class="primary-btn">Confirm Check In</button>
+  </div>
+
+  <div id="inventoryPanel" class="info-form hidden">
+    <h3 id="inventoryTitle">Inventory</h3>
+    <div id="inventoryList" class="inventory-list"></div>
+    <label style="margin-top:16px;">Item Description</label>
+    <input id="inventoryDescription" type="text" placeholder="e.g. Gold ring, cell phone, wallet with paperwork">
+    <label>Photo (optional)</label>
+    <input id="inventoryPhotoInput" type="file" accept="image/*" capture="environment">
+    <img id="inventoryPhotoPreview" class="inventory-photo-preview hidden" alt="Preview">
+    <button id="addInventoryBtn" class="primary-btn">Add Item</button>
+    <div id="inventoryStatus" class="status-msg"></div>
   </div>
 
   <div class="reset-row">

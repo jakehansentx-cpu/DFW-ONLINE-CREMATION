@@ -39,6 +39,14 @@ const confirmMessage = document.getElementById("confirmMessage");
 const confirmYesBtn = document.getElementById("confirmYesBtn");
 const confirmNoBtn = document.getElementById("confirmNoBtn");
 const staffSelect = document.getElementById("staffSelect");
+const inventoryPanel = document.getElementById("inventoryPanel");
+const inventoryTitle = document.getElementById("inventoryTitle");
+const inventoryList = document.getElementById("inventoryList");
+const inventoryDescription = document.getElementById("inventoryDescription");
+const inventoryPhotoInput = document.getElementById("inventoryPhotoInput");
+const inventoryPhotoPreview = document.getElementById("inventoryPhotoPreview");
+const addInventoryBtn = document.getElementById("addInventoryBtn");
+const inventoryStatus = document.getElementById("inventoryStatus");
 
 // "Who's working?" is picked once per shift and remembered across page
 // reloads -- not a login, just tags every Assign/Move/Release/Checkout/
@@ -275,10 +283,16 @@ function resetFlow() {
   printTagLink.classList.add("hidden");
   printGate.classList.add("hidden");
   releaseReceiptGate.classList.add("hidden");
+  inventoryPanel.classList.add("hidden");
   confirmBox.classList.add("hidden");
   pendingConfirmAction = null;
   printedName.value = "";
   diskNumber.value = "";
+  inventoryDescription.value = "";
+  inventoryPhotoInput.value = "";
+  inventoryPhotoPreview.classList.add("hidden");
+  inventoryStatus.textContent = "";
+  inventoryStatus.className = "status-msg";
   clearSignature();
   statusMsg.textContent = "";
   statusMsg.className = "status-msg";
@@ -300,6 +314,7 @@ function resetFlow() {
   if (mode === "release") stepLabel.textContent = "Scan the Case ID to release / mark picked up";
   if (mode === "cremate") stepLabel.textContent = "Scan the armband QR to confirm cremation";
   if (mode === "checkout") stepLabel.textContent = "Scan the Case ID to check out or check back in";
+  if (mode === "inventory") stepLabel.textContent = "Scan the Case ID to view/add inventory";
   scanInput.value = "";
 }
 resetBtn.addEventListener("click", resetFlow);
@@ -486,6 +501,14 @@ async function handleCaseScan(rawCode) {
       return;
     }
     showStatus(`${code} is not currently placed or checked out -- nothing to check out/in.`, false);
+    return;
+  }
+
+  if (mode === "inventory") {
+    inventoryTitle.textContent = `Inventory — ${code}${nameTag}`;
+    inventoryPanel.classList.remove("hidden");
+    showStatus(`${code}${nameTag} scanned.`, true);
+    await loadInventory(code);
     return;
   }
 
@@ -679,6 +702,110 @@ confirmCheckinBtn.addEventListener("click", async () => {
     showStatus(`${currentCaseCode} checked in.${warning} Scan a slot location.`, !result.sheet_warning);
   } catch (err) {
     showStatus(err.message, false);
+  }
+});
+
+// ---------------- Inventory ----------------
+// Personal effects (jewelry, clothing, phone, paperwork, etc.) logged
+// per decedent -- a description, optionally with one photo captured
+// straight from the device's camera. Multiple angles of the same item
+// are just multiple line entries.
+function renderInventoryList(items) {
+  if (items.length === 0) {
+    inventoryList.innerHTML = `<p style="color:#889; margin:0;">No items logged yet.</p>`;
+    return;
+  }
+  inventoryList.innerHTML = items
+    .map(
+      (item) => `
+    <div class="inventory-row">
+      ${item.has_photo ? `<img class="inventory-thumb" src="/api/inventory/${item.id}/photo" alt="">` : ""}
+      <div class="inventory-info">
+        <div>${escapeHtmlLocal(item.description || "(photo only)")}</div>
+        <div style="color:#889; font-size:12.5px;">${escapeHtmlLocal(item.when)}${item.staff ? " — " + escapeHtmlLocal(item.staff) : ""}</div>
+      </div>
+      <button class="inventory-delete-btn" data-id="${item.id}">Delete</button>
+    </div>`
+    )
+    .join("");
+
+  inventoryList.querySelectorAll(".inventory-delete-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const itemId = btn.dataset.id;
+      askConfirm("Delete this inventory item? This can't be undone.", async () => {
+        try {
+          const res = await fetch(`/api/inventory/${itemId}/delete`, { method: "POST" });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Delete failed");
+          renderInventoryList(data.items);
+        } catch (err) {
+          inventoryStatus.textContent = err.message;
+          inventoryStatus.className = "status-msg err";
+        }
+      });
+    });
+  });
+}
+
+async function loadInventory(code) {
+  try {
+    const res = await fetch(`/api/case/${encodeURIComponent(code)}/inventory`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Couldn't load inventory");
+    renderInventoryList(data.items);
+  } catch (err) {
+    inventoryList.innerHTML = "";
+    inventoryStatus.textContent = err.message;
+    inventoryStatus.className = "status-msg err";
+  }
+}
+
+inventoryPhotoInput.addEventListener("change", () => {
+  const file = inventoryPhotoInput.files[0];
+  if (!file) {
+    inventoryPhotoPreview.classList.add("hidden");
+    return;
+  }
+  inventoryPhotoPreview.src = URL.createObjectURL(file);
+  inventoryPhotoPreview.classList.remove("hidden");
+});
+
+addInventoryBtn.addEventListener("click", async () => {
+  if (!currentCaseCode) return;
+  const description = inventoryDescription.value.trim();
+  const photo = inventoryPhotoInput.files[0];
+  if (!description && !photo) {
+    inventoryStatus.textContent = "Enter a description or attach a photo.";
+    inventoryStatus.className = "status-msg err";
+    return;
+  }
+
+  const body = new FormData();
+  body.append("description", description);
+  body.append("staff", getStaffName());
+  if (photo) body.append("photo", photo);
+
+  addInventoryBtn.disabled = true;
+  inventoryStatus.textContent = "Saving...";
+  inventoryStatus.className = "status-msg";
+  try {
+    const res = await fetch(`/api/case/${encodeURIComponent(currentCaseCode)}/inventory`, {
+      method: "POST",
+      body,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Couldn't save item");
+    renderInventoryList(data.items);
+    inventoryDescription.value = "";
+    inventoryPhotoInput.value = "";
+    inventoryPhotoPreview.classList.add("hidden");
+    inventoryStatus.textContent = "Item added.";
+    inventoryStatus.className = "status-msg ok";
+  } catch (err) {
+    inventoryStatus.textContent = err.message;
+    inventoryStatus.className = "status-msg err";
+  } finally {
+    addInventoryBtn.disabled = false;
   }
 });
 

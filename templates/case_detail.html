@@ -63,6 +63,25 @@
       </div>
     {% endif %}
 
+    {% if inventory %}
+      <div class="info-form" style="display:block; margin-top:16px;">
+        <h3 style="margin-top:0;">Inventory</h3>
+        <div class="inventory-list">
+          {% for item in inventory %}
+            <div class="inventory-row">
+              {% if item.has_photo %}
+                <img class="inventory-thumb" src="{{ url_for('inventory_photo', item_id=item.id) }}" alt="">
+              {% endif %}
+              <div class="inventory-info">
+                <div>{{ item.description or "(photo only)" }}</div>
+                <div class="history-when">{{ item.when }}{% if item.staff %} — {{ item.staff }}{% endif %}</div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
     {% if history %}
       <div class="info-form" style="display:block; margin-top:16px;">
         <h3 style="margin-top:0;">History</h3>
