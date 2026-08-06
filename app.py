@@ -835,6 +835,22 @@ def api_set_sheet():
     return jsonify(ok=True, sheet_id=sheet_id, label=label)
 
 
+def _release_orphaned_field_alias(db, case_code):
+    """If case_code was already claimed by a blank field tag (see
+    _resolve_field_tag above), but is now getting its real info from
+    somewhere else entirely -- typed straight into the sheet -- that
+    claim is orphaned: the physical tag was never actually applied to
+    this decedent. Release it so the tag is free to claim a fresh
+    number next time it's actually scanned, instead of permanently
+    pointing at a decedent it was never used for."""
+    alias = db.execute(
+        "SELECT placeholder_code FROM tag_aliases WHERE real_case_code = ?", (case_code,)
+    ).fetchone()
+    if alias:
+        db.execute("DELETE FROM tag_aliases WHERE placeholder_code = ?", (alias["placeholder_code"],))
+        print(f"[auto-sync] released field-tag claim {alias['placeholder_code']} for {case_code} (filled in manually)")
+
+
 def run_sheet_sync(db, base_url):
     """
     Picks up decedents staff typed straight into the spreadsheet instead
@@ -883,6 +899,7 @@ def run_sheet_sync(db, base_url):
                     "UPDATE cases SET name = ?, funeral_home = ?, pickup_date = ?, status = 'pending_location' WHERE id = ?",
                     (name, funeral_home, parse_date_from_sheet(date_str), existing["id"]),
                 )
+                _release_orphaned_field_alias(db, case_code)
                 db.commit()
             # The column N link may also never have actually been written
             # (e.g. an earlier sync attempt got interrupted), so make
@@ -911,6 +928,7 @@ def run_sheet_sync(db, base_url):
                 removal_by or None, night or None,
             ),
         )
+        _release_orphaned_field_alias(db, case_code)
         db.commit()
 
         if not cols[13].strip():
