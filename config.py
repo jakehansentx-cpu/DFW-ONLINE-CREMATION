@@ -79,7 +79,9 @@ GOOGLE_SHEET_TAB = ""  # leave blank unless you have multiple tabs and need a sp
 # _background_sync_loop in app.py) picks up a manually-typed sheet row,
 # since there's no browser request to read a host name from at that
 # point. Same address gen_field_tags.py already uses for printed tags.
-PUBLIC_HOST = "https://137.119.230.213:5000"
+# This must be reachable from staff's own devices -- the Tailscale Serve
+# hostname, not the old public IP (that port forward was removed).
+PUBLIC_HOST = "https://metro-body-storage.tail8ed927.ts.net"
 
 # How often (in minutes) the app automatically checks the current sheet
 # for decedents typed straight in (bypassing the scan station) and syncs

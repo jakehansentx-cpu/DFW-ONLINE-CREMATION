@@ -1,18 +1,22 @@
 """
-Generates printable placeholder armband tags for field use (see the
+Generates printable placeholder ankle-tag QR labels for field use (see the
 "pre-printed blank field tags" plan) -- a batch of QR codes with generic
-FIELD-### codes, not tied to any Google Sheet row yet. Grab one from the
-printed stack when creating an armband in the field; the case gets a real
-sheet-issued case number claimed for it once the tag is actually scanned
-(that claim-on-first-scan logic lives in app.py's _resolve_field_tag()).
+FIELD-### codes, not tied to any Google Sheet row yet. Peel one from the
+sheet and stick it onto a blank ankle band when creating a case in the
+field; the case gets a real sheet-issued case number claimed for it once
+the tag is actually scanned (that claim-on-first-scan logic lives in
+app.py's _resolve_field_tag()).
 
 Each QR encodes a full URL (same format as a real case tag) so any phone
 camera can open it directly:
-    https://<PUBLIC_HOST>/case/FIELD-001
+    https://<config.PUBLIC_HOST>/case/FIELD-001
 
-Output is QR codes ONLY -- no border, text, or other markings around
-them -- sized 2x2cm (the size confirmed by taping a test print onto the
-real armband stock), arranged in a plain grid for cutting apart.
+Sized for Avery 5161 (also sold as 5261/5909/5961/8161/8461) label sheets --
+1" x 4", 20 per sheet, 2 columns x 10 rows -- to fit the ~1 1/4" x 3 7/8"
+label area on the ankle bands. Each label gets the QR code plus the
+FIELD-### code printed as text, for a human-readable fallback if a scan
+ever fails -- nothing else (no blank lines; staff write the name/funeral
+home/date directly on the band, not on the sticker).
 
 Usage:
     python gen_field_tags.py                -- 50 tags (FIELD-001..FIELD-050)
@@ -24,19 +28,23 @@ import os
 import io
 import qrcode
 from reportlab.lib.pagesizes import letter
-from reportlab.lib.units import cm
+from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 
-# Change this if your public address changes (e.g. once Tailscale or a
-# domain name is set up) -- this is baked into every printed QR code, so
-# regenerate + reprint the batch if it does.
-PUBLIC_HOST = "https://137.119.230.213:5000"
+import config
 
-QR_SIZE = 2 * cm  # confirmed working size, taped onto the real armband stock
-CELL = 3.5 * cm   # QR_SIZE plus room around it to cut apart cleanly
-COLS = 5
-ROWS = 7          # 5x7 = 35 per page
+# Avery 5161 sheet geometry -- 2 columns x 10 rows of 1" x 4" labels, no
+# gap between labels (0.25" side margins + 2*4" = 8.5", 0.5" top/bottom
+# margins + 10*1" = 11").
+LABEL_W = 4 * inch
+LABEL_H = 1 * inch
+COLS = 2
+ROWS = 10
+SIDE_MARGIN = 0.25 * inch
+TOP_MARGIN = 0.5 * inch
+
+QR_SIZE = 0.85 * inch  # leaves a small margin within the 1" label height
 
 
 def make_qr_image(data, box_size=8):
@@ -58,8 +66,6 @@ def make_qr_image(data, box_size=8):
 def build_field_tag_sheet(filename, codes):
     c = canvas.Canvas(filename, pagesize=letter)
     page_w, page_h = letter
-    margin_x = (page_w - COLS * CELL) / 2
-    margin_y = (page_h - ROWS * CELL) / 2
 
     per_page = COLS * ROWS
     for i, code in enumerate(codes):
@@ -68,13 +74,19 @@ def build_field_tag_sheet(filename, codes):
             c.showPage()
         col = pos % COLS
         row = pos // COLS
-        cell_x = margin_x + col * CELL
-        cell_y = page_h - margin_y - (row + 1) * CELL
+        label_x = SIDE_MARGIN + col * LABEL_W
+        label_y = page_h - TOP_MARGIN - (row + 1) * LABEL_H
 
-        qr_img = make_qr_image(f"{PUBLIC_HOST}/case/{code}")
-        qr_x = cell_x + (CELL - QR_SIZE) / 2
-        qr_y = cell_y + (CELL - QR_SIZE) / 2
+        qr_img = make_qr_image(f"{config.PUBLIC_HOST}/case/{code}")
+        qr_margin = (LABEL_H - QR_SIZE) / 2
+        qr_x = label_x + qr_margin
+        qr_y = label_y + qr_margin
         c.drawImage(qr_img, qr_x, qr_y, width=QR_SIZE, height=QR_SIZE)
+
+        c.setFont("Helvetica-Bold", 16)
+        text_x = qr_x + QR_SIZE + (0.15 * inch)
+        text_y = label_y + LABEL_H / 2 - 6
+        c.drawString(text_x, text_y, code)
 
     c.save()
 
@@ -88,7 +100,7 @@ elif len(args) == 1:
 else:
     start, end = args[0], args[1]
 
-codes = [f"FIELD-{n:03d}" for n in range(start, end + 1)]
+codes = [f"{config.FIELD_TAG_PREFIX}{n:03d}" for n in range(start, end + 1)]
 
 out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "field_tags.pdf")
 build_field_tag_sheet(out_path, codes)
