@@ -278,6 +278,22 @@ body {
 }
 .mode-btn.active { background: #2a5d8a; color: #fff; border-color: #2a5d8a; }
 
+.home-screen { margin-bottom: 16px; }
+.home-scan-btn {
+  width: 100%; padding: 24px; font-size: 20px; font-weight: 700;
+  background: #2a5d8a; color: #fff; border: none; border-radius: 12px; margin-bottom: 14px;
+}
+.home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.home-mode-btn {
+  padding: 18px 8px; font-size: 15px;
+  background: #1a1f26; color: #ccc; border: 1px solid #333; border-radius: 10px;
+}
+.smart-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.smart-actions button, .smart-actions a {
+  padding: 12px; font-size: 15px; width: 100%; border: none; border-radius: 8px;
+  color: #fff; background: #333; text-decoration: none; display: block; text-align: center; box-sizing: border-box;
+}
+
 .scan-panel { background: #1a1f26; border-radius: 10px; padding: 20px; text-align: center; }
 .step-label { font-size: 18px; margin-bottom: 12px; color: #aab; }
 .scan-input {

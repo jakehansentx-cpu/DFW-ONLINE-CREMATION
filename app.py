@@ -33,6 +33,8 @@ app = Flask(__name__)
 DB_PATH = "cooler.db"
 INVENTORY_PHOTOS_PATH = Path(config.INVENTORY_PHOTOS_DIR)
 INVENTORY_PHOTOS_PATH.mkdir(exist_ok=True)
+CASE_DOCUMENTS_PATH = Path(config.CASE_DOCUMENTS_DIR)
+CASE_DOCUMENTS_PATH.mkdir(exist_ok=True)
 
 
 def _sheets():
@@ -284,6 +286,15 @@ def init_db():
             case_id INTEGER NOT NULL REFERENCES cases(id),
             description TEXT,
             photo_filename TEXT,  -- filename under config.INVENTORY_PHOTOS_DIR, or NULL
+            created_at TEXT NOT NULL,
+            staff TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS case_documents (
+            id INTEGER PRIMARY KEY,
+            case_id INTEGER NOT NULL REFERENCES cases(id),
+            doc_type TEXT,  -- "Face Sheet", "First Call Sheet", etc. -- free text, staff types it
+            photo_filename TEXT NOT NULL,
             created_at TEXT NOT NULL,
             staff TEXT
         );
@@ -838,6 +849,41 @@ def _save_inventory_photo(file_storage, case_code, name, timestamp):
     img = _stamp_inventory_caption(img, case_code, name, timestamp)
     filename = f"{secrets.token_hex(12)}.jpg"
     img.save(INVENTORY_PHOTOS_PATH / filename, format="JPEG", quality=82)
+    return filename, None
+
+
+def get_case_documents(db, case_id):
+    """Scanned paperwork (face sheets, first call sheets, etc.) logged
+    for a decedent -- oldest first, same order staff scanned them in."""
+    rows = db.execute(
+        "SELECT id, doc_type, created_at, staff FROM case_documents "
+        "WHERE case_id = ? ORDER BY id ASC",
+        (case_id,),
+    ).fetchall()
+    return [
+        {
+            "id": r["id"],
+            "doc_type": r["doc_type"],
+            "when": _format_when(r["created_at"]),
+            "staff": r["staff"],
+        }
+        for r in rows
+    ]
+
+
+def _save_document_photo(file_storage, case_code, name, timestamp):
+    """Same resize/re-encode/caption treatment as _save_inventory_photo
+    -- see that function's docstring."""
+    try:
+        img = Image.open(file_storage.stream)
+        img = img.convert("RGB")
+    except Exception:
+        return None, "That doesn't look like a photo the app can read -- try again."
+
+    img.thumbnail((1600, 1600))
+    img = _stamp_inventory_caption(img, case_code, name, timestamp)
+    filename = f"{secrets.token_hex(12)}.jpg"
+    img.save(CASE_DOCUMENTS_PATH / filename, format="JPEG", quality=82)
     return filename, None
 
 
@@ -1553,6 +1599,96 @@ def inventory_photo(item_id):
     return app.response_class(photo_path.read_bytes(), mimetype="image/jpeg")
 
 
+@app.route("/api/case/<case_code>/documents")
+@login_required
+def api_list_documents(case_code):
+    """Scanned paperwork (face sheets, first call sheets, etc.) logged
+    for a decedent -- backs the scan station's Scan Document mode."""
+    db = get_db()
+    case = db.execute("SELECT id FROM cases WHERE case_code = ?", (case_code,)).fetchone()
+    if case is None:
+        return jsonify(error="Unknown case code"), 404
+    return jsonify(items=get_case_documents(db, case["id"]))
+
+
+@app.route("/api/case/<case_code>/documents", methods=["POST"])
+@login_required
+def api_add_document(case_code):
+    """Adds one scanned document: a type/label (Face Sheet, First Call
+    Sheet, etc.), a required photo, and whoever scanned it. Same
+    multi-capture-friendly shape as api_add_inventory -- each photo in a
+    batch is its own call with its own captured_at."""
+    db = get_db()
+    case = db.execute("SELECT id, name FROM cases WHERE case_code = ?", (case_code,)).fetchone()
+    if case is None:
+        return jsonify(error="Unknown case code"), 404
+
+    doc_type = (request.form.get("doc_type") or "").strip()
+    staff = session.get("username") or ""
+    photo = request.files.get("photo")
+    captured_at = (request.form.get("captured_at") or "").strip()
+
+    if not photo or not photo.filename:
+        return jsonify(error="Attach a photo of the document"), 400
+
+    timestamp = now()
+    if captured_at:
+        try:
+            datetime.strptime(captured_at, "%Y-%m-%d %H:%M:%S")
+            timestamp = captured_at
+        except ValueError:
+            pass  # malformed -- fall back to server time rather than reject the item
+
+    photo_filename, err = _save_document_photo(photo, case_code, case["name"], timestamp)
+    if err:
+        return jsonify(error=err), 400
+
+    db.execute(
+        "INSERT INTO case_documents (case_id, doc_type, photo_filename, created_at, staff) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (case["id"], doc_type or None, photo_filename, timestamp, staff),
+    )
+    db.commit()
+
+    return jsonify(ok=True, items=get_case_documents(db, case["id"]))
+
+
+@app.route("/api/documents/<int:doc_id>/delete", methods=["POST"])
+@login_required
+def api_delete_document(doc_id):
+    """Removes one scanned document (and its photo file) -- for a
+    mis-scanned or duplicate page."""
+    db = get_db()
+    item = db.execute("SELECT * FROM case_documents WHERE id = ?", (doc_id,)).fetchone()
+    if item is None:
+        return jsonify(error="Unknown document"), 404
+
+    if item["photo_filename"]:
+        photo_path = CASE_DOCUMENTS_PATH / item["photo_filename"]
+        photo_path.unlink(missing_ok=True)
+
+    db.execute("DELETE FROM case_documents WHERE id = ?", (doc_id,))
+    db.commit()
+
+    return jsonify(ok=True, items=get_case_documents(db, item["case_id"]))
+
+
+@app.route("/api/documents/<int:doc_id>/photo")
+@login_required
+def document_photo(doc_id):
+    """Serves one scanned document's photo, looked up by id."""
+    db = get_db()
+    item = db.execute(
+        "SELECT photo_filename FROM case_documents WHERE id = ?", (doc_id,)
+    ).fetchone()
+    if item is None or not item["photo_filename"]:
+        return jsonify(error="No photo for this document"), 404
+    photo_path = CASE_DOCUMENTS_PATH / item["photo_filename"]
+    if not photo_path.is_file():
+        return jsonify(error="Photo file missing"), 404
+    return app.response_class(photo_path.read_bytes(), mimetype="image/jpeg")
+
+
 @app.route("/case/<case_code>/print")
 @login_required
 def case_print_page(case_code):
@@ -1710,6 +1846,50 @@ def location_qr_image(location_code):
     resp = app.response_class(png_bytes, mimetype="image/png")
     resp.headers["Cache-Control"] = "no-cache"
     return resp
+
+
+@app.route("/api/location/<location_code>/lookup")
+@login_required
+def api_location_lookup(location_code):
+    """Who (if anyone) currently occupies a shelf/slot -- for the scan
+    app's smart-scan flow, so scanning an occupied shelf's own QR code
+    shows that decedent's info directly instead of only being usable as
+    a move/assign destination."""
+    db = get_db()
+    loc = db.execute("SELECT * FROM locations WHERE code = ?", (location_code,)).fetchone()
+    if loc is None:
+        return jsonify(error="Unknown location"), 404
+    occupants = db.execute(
+        "SELECT case_code, name, funeral_home, pickup_date, status FROM cases WHERE location_id = ? AND status = 'placed'",
+        (loc["id"],),
+    ).fetchall()
+    return jsonify(
+        location_code=loc["code"],
+        cooler_name=loc["cooler_name"],
+        shelf=loc["shelf"],
+        slot=loc["slot"],
+        occupants=[dict(o) for o in occupants],
+    )
+
+
+@app.route("/api/cases/search")
+@login_required
+def api_cases_search():
+    """Every case (any status) matching a name/case-number substring --
+    for the scan app's Find Decedent search. Unlike /api/board (which
+    only reflects who's currently occupying a shelf), this also finds a
+    case that isn't placed yet or is temporarily checked out."""
+    q = (request.args.get("q") or "").strip().lower()
+    if not q:
+        return jsonify([])
+    db = get_db()
+    rows = db.execute(
+        "SELECT case_code, name, funeral_home, status FROM cases "
+        "WHERE LOWER(name) LIKE ? OR LOWER(case_code) LIKE ? "
+        "ORDER BY created_at DESC LIMIT 20",
+        (f"%{q}%", f"%{q}%"),
+    ).fetchall()
+    return jsonify([dict(r) for r in rows])
 
 
 @app.route("/case/<case_code>/qr.png")

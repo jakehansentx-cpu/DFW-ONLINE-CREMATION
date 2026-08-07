@@ -1,4 +1,19 @@
-const modeButtons = document.querySelectorAll(".mode-btn");
+const homeModeButtons = document.querySelectorAll(".home-mode-btn");
+const homeScreen = document.getElementById("homeScreen");
+const smartScanBtn = document.getElementById("smartScanBtn");
+const scanPanel = document.getElementById("scanPanel");
+const homeBtn = document.getElementById("homeBtn");
+const smartResult = document.getElementById("smartResult");
+const quickPrintPanel = document.getElementById("quickPrintPanel");
+const quickPrintTitle = document.getElementById("quickPrintTitle");
+const quickPrintOfficeBtn = document.getElementById("quickPrintOfficeBtn");
+const quickPrintLabelBtn = document.getElementById("quickPrintLabelBtn");
+const quickPrintBackBtn = document.getElementById("quickPrintBackBtn");
+const findDecedentBtn = document.getElementById("findDecedentBtn");
+const findPanel = document.getElementById("findPanel");
+const findInput = document.getElementById("findInput");
+const findResults = document.getElementById("findResults");
+const findBackBtn = document.getElementById("findBackBtn");
 const scanInput = document.getElementById("scanInput");
 const stepLabel = document.getElementById("stepLabel");
 const statusMsg = document.getElementById("statusMsg");
@@ -58,6 +73,21 @@ let inventoryCameraStream = null;
 let pendingCaptures = [];
 const addInventoryBtn = document.getElementById("addInventoryBtn");
 const inventoryStatus = document.getElementById("inventoryStatus");
+
+const documentsPanel = document.getElementById("documentsPanel");
+const documentsTitle = document.getElementById("documentsTitle");
+const documentsList = document.getElementById("documentsList");
+const documentsType = document.getElementById("documentsType");
+const documentsCameraBtn = document.getElementById("documentsCameraBtn");
+const documentsCameraPanel = document.getElementById("documentsCameraPanel");
+const documentsCameraVideo = document.getElementById("documentsCameraVideo");
+const documentsCameraCanvas = document.getElementById("documentsCameraCanvas");
+const documentsCameraStopBtn = document.getElementById("documentsCameraStopBtn");
+const documentsPendingList = document.getElementById("documentsPendingList");
+let documentsCameraStream = null;
+let documentsPendingCaptures = [];
+const addDocumentBtn = document.getElementById("addDocumentBtn");
+const documentsStatus = document.getElementById("documentsStatus");
 
 // ---------------- Monthly spreadsheet ----------------
 // A new call log spreadsheet gets generated every month. New intakes
@@ -249,12 +279,27 @@ let cameraStream = null;
 let cameraLoopId = null;
 let cameraCooldown = false; // prevents re-firing on the same code every frame
 
-let mode = "sheet-intake";
+let mode = "home";
 let step = "case";       // case | location
 let currentCaseCode = null;
 let currentCaseName = null;
 let currentSheetRow = null;
 let pendingConfirmAction = null;
+// True for the rest of a single action started from a smart-scan
+// contextual button (e.g. tapping "Move to New Location" after scanning
+// an armband) -- those are one-off actions, so completing one should
+// return to the home screen instead of re-arming that same mode for
+// another case, which is what the classic home-grid mode buttons do.
+let smartOneOff = false;
+
+function finishFlow() {
+  if (smartOneOff) {
+    smartOneOff = false;
+    setMode("home");
+  } else {
+    resetFlow();
+  }
+}
 
 // Used wherever a case is referenced in a status/step message, so staff
 // can visually verify they've got the right decedent -- the case number
@@ -285,10 +330,13 @@ confirmNoBtn.addEventListener("click", () => {
 
 function setMode(newMode) {
   mode = newMode;
-  modeButtons.forEach((b) => b.classList.toggle("active", b.dataset.mode === newMode));
   resetFlow();
 }
-modeButtons.forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+homeModeButtons.forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+homeBtn.addEventListener("click", () => setMode("home"));
+smartScanBtn.addEventListener("click", () => setMode("smart"));
+quickPrintBackBtn.addEventListener("click", () => setMode("home"));
+resetBtn.addEventListener("click", resetFlow);
 
 function resetFlow() {
   step = "case";
@@ -305,6 +353,10 @@ function resetFlow() {
   printGate.classList.add("hidden");
   releaseReceiptGate.classList.add("hidden");
   inventoryPanel.classList.add("hidden");
+  documentsPanel.classList.add("hidden");
+  smartResult.classList.add("hidden");
+  smartResult.innerHTML = "";
+  quickPrintPanel.classList.add("hidden");
   confirmBox.classList.add("hidden");
   pendingConfirmAction = null;
   printedName.value = "";
@@ -315,10 +367,20 @@ function resetFlow() {
   addInventoryBtn.textContent = "Add Item";
   inventoryStatus.textContent = "";
   inventoryStatus.className = "status-msg";
+  documentsType.value = "";
+  stopDocumentsCamera();
+  clearDocumentsPendingCaptures();
+  addDocumentBtn.textContent = "Add Document";
+  documentsStatus.textContent = "";
+  documentsStatus.className = "status-msg";
   clearSignature();
   statusMsg.textContent = "";
   statusMsg.className = "status-msg";
   if (typeof stopCamera === "function") stopCamera();
+
+  homeScreen.classList.toggle("hidden", mode !== "home");
+  findPanel.classList.toggle("hidden", mode !== "find");
+  scanPanel.classList.toggle("hidden", mode === "home" || mode === "find");
 
   const isSheetIntake = mode === "sheet-intake";
   // Manual scan input box is hidden everywhere -- this station only uses
@@ -337,9 +399,13 @@ function resetFlow() {
   if (mode === "cremate") stepLabel.textContent = "Scan the armband QR to confirm cremation";
   if (mode === "checkout") stepLabel.textContent = "Scan the Case ID to check out or check back in";
   if (mode === "inventory") stepLabel.textContent = "Scan the Case ID to view/add inventory";
+  if (mode === "documents") stepLabel.textContent = "Scan the Case ID to add a document";
+  if (mode === "print") stepLabel.textContent = "Scan the Case ID tag to print";
+  if (mode === "smart" || mode === "edit") stepLabel.textContent = "Scan any QR code -- armband, shelf, or blank tag";
   scanInput.value = "";
+
+  if (mode === "smart") startCamera();
 }
-resetBtn.addEventListener("click", resetFlow);
 
 // After decedent info is saved, the tag has to actually get printed before
 // the flow moves on to placing the decedent -- this screen forces that
@@ -471,7 +537,11 @@ scanInput.addEventListener("keydown", async (e) => {
 
 async function processScannedCode(code) {
   try {
-    if (step === "case") {
+    if (mode === "smart") {
+      await handleSmartScan(code);
+    } else if (mode === "print") {
+      await handlePrintScan(code);
+    } else if (step === "case") {
       await handleCaseScan(code);
     } else if (step === "location") {
       await handleLocationScan(code);
@@ -581,6 +651,14 @@ async function handleCaseScan(rawCode) {
     return;
   }
 
+  if (mode === "documents") {
+    documentsTitle.textContent = `Documents — ${code}${nameTag}`;
+    documentsPanel.classList.remove("hidden");
+    showStatus(`${code}${nameTag} scanned.`, true);
+    await loadDocuments(code);
+    return;
+  }
+
   if (mode === "assign" || mode === "sheet-intake") {
     if (caseData.status === "placed") {
       showStatus(`${code} is already placed. Use Move instead.`, false);
@@ -635,7 +713,304 @@ async function handleLocationScan(code) {
     await postJSON("/api/move", { case_code: currentCaseCode, location_code: code, staff: getStaffName() });
     showStatus(`${currentCaseCode} moved to ${code}.`, true);
   }
-  setTimeout(resetFlow, 1400);
+  setTimeout(finishFlow, 1400);
+}
+
+// ==================== Smart scan (unified "just scan it" flow) ====================
+// Triggered by the home screen's big camera button -- unlike every other
+// mode above, this one doesn't need a mode picked first. It looks at
+// WHAT was scanned and figures out what to show: an occupied shelf's own
+// QR shows that decedent's info + an edit button; an unclaimed blank
+// field tag goes straight into the same entry form Decedent Information
+// uses; an armband/case tag shows only the actions that make sense for
+// that case's current status.
+async function handleSmartScan(rawCode) {
+  if (rawCode.startsWith("LOC|")) {
+    await handleSmartLocationScan(rawCode);
+    return;
+  }
+  const code = normalizeCaseCode(rawCode);
+  if (!code) {
+    showStatus("That doesn't look like a Case ID or location tag.", false);
+    return;
+  }
+  await handleSmartCaseScan(code);
+}
+
+async function handleSmartLocationScan(locationCode) {
+  const res = await fetch(`/api/location/${encodeURIComponent(locationCode)}/lookup`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Couldn't look up that location");
+  stopCamera();
+  const where = `${data.cooler_name} — Shelf ${data.shelf}${data.slot || ""}`;
+
+  if (data.occupants.length === 0) {
+    smartResult.innerHTML = `
+      <h3 style="margin-top:0;">${escapeHtmlLocal(where)}</h3>
+      <p style="color:#889;">Empty.</p>
+      <button id="smartBackBtn" class="secondary-btn" style="margin-top:14px;">🏠 Back to Home</button>`;
+  } else {
+    const blocks = data.occupants
+      .map(
+        (o) => `
+      <div style="border-top:1px solid #333; padding-top:12px; margin-top:12px;">
+        <p style="margin:4px 0;"><b>Case:</b> ${escapeHtmlLocal(o.case_code)}</p>
+        <p style="margin:4px 0;"><b>Name:</b> ${escapeHtmlLocal(o.name || "—")}</p>
+        <p style="margin:4px 0;"><b>Funeral Home:</b> ${escapeHtmlLocal(o.funeral_home || "—")}</p>
+        <p style="margin:4px 0;"><b>Pickup Date:</b> ${escapeHtmlLocal(o.pickup_date || "—")}</p>
+        <button class="smart-edit-btn" data-case="${escapeHtmlLocal(o.case_code)}" style="margin-top:10px; width:100%; padding:12px; background:#2a5d8a; color:#fff; border:none; border-radius:8px;">✏️ Edit Information</button>
+      </div>`
+      )
+      .join("");
+    smartResult.innerHTML = `
+      <h3 style="margin-top:0;">${escapeHtmlLocal(where)}</h3>
+      ${blocks}
+      <button id="smartBackBtn" class="secondary-btn" style="margin-top:14px;">🏠 Back to Home</button>`;
+  }
+  smartResult.classList.remove("hidden");
+  wireSmartResultButtons(null);
+  showStatus(`${where} scanned.`, true);
+}
+
+async function handleSmartCaseScan(code) {
+  const caseData = await postJSON("/api/case/lookup", { case_code: code });
+  code = caseData.case_code || code;
+  currentCaseCode = code;
+  currentCaseName = caseData.name || null;
+  stopCamera();
+
+  if (caseData.status === "pending_info") {
+    // Blank/unclaimed tag, or a case started but never filled in -- same
+    // entry form as Decedent Information's "Start New Case".
+    infoFormTitle.textContent = `Case ${code} — Enter Details`;
+    infoForm.classList.remove("hidden");
+    clearInfoForm();
+    saveInfoBtn.textContent = "Save";
+    showStatus(`New case ${code}. Fill in details below.`, true);
+    return;
+  }
+
+  renderSmartCaseActions(caseData);
+}
+
+function renderSmartCaseActions(caseData) {
+  const code = caseData.case_code;
+  const nameTag = nameSuffix(caseData.name);
+  const status = caseData.status;
+
+  if (status === "released") {
+    const outcome =
+      caseData.released_to === "Cremated"
+        ? "Cremated"
+        : `Released${caseData.released_to ? " to " + escapeHtmlLocal(caseData.released_to) : ""}`;
+    smartResult.innerHTML = `
+      <h3 style="margin-top:0;">${escapeHtmlLocal(code)}${escapeHtmlLocal(nameTag)}</h3>
+      <p style="color:#889;">${outcome}. This tag is no longer active for placement or tracking.</p>
+      <button id="smartBackBtn" class="secondary-btn" style="margin-top:14px;">🏠 Back to Home</button>`;
+    smartResult.classList.remove("hidden");
+    wireSmartResultButtons(caseData);
+    return;
+  }
+
+  let buttons = "";
+  if (status === "placed") {
+    buttons += `<button class="smart-action-btn" data-action="move">📍 Move to New Location</button>`;
+    buttons += `<button class="smart-action-btn" data-action="release">📤 Release Decedent</button>`;
+    buttons += `<button class="smart-action-btn" data-action="cremate" style="background:#5c2a2a;">🔥 Cremate</button>`;
+    buttons += `<button class="smart-action-btn" data-action="checkout">📦 Check Out</button>`;
+  } else if (status === "checked_out") {
+    buttons += `<button class="smart-action-btn" data-action="checkin">📦 Check In</button>`;
+  } else if (status === "pending_location") {
+    buttons += `<button class="smart-action-btn" data-action="place">📍 Place at Location</button>`;
+  }
+  buttons += `<button class="smart-action-btn" data-action="inventory">🗂️ Take Inventory</button>`;
+  buttons += `<button class="smart-action-btn" data-action="documents">📄 Scan Document</button>`;
+  buttons += `<button class="smart-action-btn" data-action="edit">✏️ Edit Decedent Information</button>`;
+  buttons += `<button class="smart-action-btn" data-action="print">🖨️ Print Tag</button>`;
+  buttons += `<button id="smartBackBtn" class="secondary-btn" style="margin-top:6px;">🏠 Back to Home</button>`;
+
+  smartResult.innerHTML = `
+    <h3 style="margin-top:0;">${escapeHtmlLocal(code)}${escapeHtmlLocal(nameTag)}</h3>
+    <div class="smart-actions">${buttons}</div>`;
+  smartResult.classList.remove("hidden");
+  wireSmartResultButtons(caseData);
+}
+
+function wireSmartResultButtons(caseData) {
+  const backBtn = document.getElementById("smartBackBtn");
+  if (backBtn) backBtn.addEventListener("click", () => setMode("home"));
+
+  smartResult.querySelectorAll(".smart-edit-btn").forEach((btn) => {
+    btn.addEventListener("click", () => startEditFlow(btn.dataset.case, null));
+  });
+
+  smartResult.querySelectorAll(".smart-action-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const action = btn.dataset.action;
+      const code = caseData.case_code;
+      const nameTag = nameSuffix(caseData.name);
+      smartResult.classList.add("hidden");
+      mode = "smart";
+      smartOneOff = true;
+      currentCaseCode = code;
+      currentCaseName = caseData.name || null;
+
+      if (action === "move" || action === "place") {
+        mode = "move";
+        step = "location";
+        stepLabel.textContent = `Scan the ${action === "move" ? "NEW " : ""}slot location for ${code}${nameTag}`;
+        showStatus(`${code}${nameTag} — scan the destination shelf.`, true);
+      } else if (action === "release") {
+        mode = "release";
+        releaseFormTitle.textContent = `Release Case ${code}${nameTag}`;
+        releasedTo.value = "";
+        releaseForm.classList.remove("hidden");
+        showStatus(`${code}${nameTag}. Enter who it's released to.`, true);
+      } else if (action === "cremate") {
+        mode = "cremate";
+        cremateFormTitle.textContent = `Cremate Case ${code}${nameTag}`;
+        diskNumber.value = "";
+        cremateForm.classList.remove("hidden");
+        showStatus(`${code}${nameTag} — enter the disk number.`, true);
+      } else if (action === "checkout") {
+        mode = "checkout";
+        checkoutFormTitle.textContent = `Check Out Case ${code}${nameTag}`;
+        checkoutOrg.value = "";
+        checkoutReason.value = "Autopsy";
+        checkoutForm.classList.remove("hidden");
+        showStatus(`${code}${nameTag}. Enter who it's checked out to.`, true);
+      } else if (action === "checkin") {
+        mode = "checkout";
+        checkinFormTitle.textContent = `Check In Case ${code}${nameTag}`;
+        const since = caseData.checked_out_at ? caseData.checked_out_at.split(" ")[0] : "";
+        checkinInfo.textContent =
+          `Currently checked out to ${caseData.checkout_org || "?"}` +
+          (caseData.checkout_reason ? ` (${caseData.checkout_reason})` : "") +
+          (since ? ` since ${since}.` : ".");
+        checkinForm.classList.remove("hidden");
+        showStatus(`${code}${nameTag}.`, true);
+      } else if (action === "inventory") {
+        mode = "inventory";
+        inventoryTitle.textContent = `Inventory — ${code}${nameTag}`;
+        inventoryPanel.classList.remove("hidden");
+        showStatus(`${code}${nameTag}.`, true);
+        loadInventory(code);
+      } else if (action === "documents") {
+        mode = "documents";
+        documentsTitle.textContent = `Documents — ${code}${nameTag}`;
+        documentsPanel.classList.remove("hidden");
+        showStatus(`${code}${nameTag}.`, true);
+        loadDocuments(code);
+      } else if (action === "edit") {
+        startEditFlow(code, caseData);
+      } else if (action === "print") {
+        showQuickPrint(code, nameTag);
+      }
+    });
+  });
+}
+
+async function startEditFlow(code, caseData) {
+  if (!caseData) {
+    caseData = await postJSON("/api/case/lookup", { case_code: code });
+  }
+  mode = "edit";
+  currentCaseCode = caseData.case_code;
+  currentCaseName = caseData.name || null;
+  smartResult.classList.add("hidden");
+  infoFormTitle.textContent = `Edit Case ${caseData.case_code}${nameSuffix(caseData.name)}`;
+  document.getElementById("fName").value = caseData.name || "";
+  document.getElementById("fHome").value = caseData.funeral_home || "";
+  document.getElementById("fDate").value = caseData.pickup_date || "";
+  document.getElementById("fTimeReceived").value = caseData.time_received || "";
+  document.getElementById("fRemovalType").value = caseData.removal_type || "";
+  document.getElementById("fDisposition").value = caseData.disposition || "";
+  document.getElementById("fRemovalBy").value = caseData.removal_by || "";
+  document.getElementById("fNight").checked = caseData.night === "Yes";
+  infoForm.classList.remove("hidden");
+  saveInfoBtn.textContent = "Save Changes";
+  showStatus(`Editing ${caseData.case_code}${nameSuffix(caseData.name)}.`, true);
+}
+
+function showQuickPrint(code, nameTag) {
+  quickPrintTitle.textContent = `Print Tag — ${code}${nameTag || ""}`;
+  quickPrintOfficeBtn.href = `/case/${encodeURIComponent(code)}/print`;
+  quickPrintLabelBtn.href = `/case/${encodeURIComponent(code)}/print-label`;
+  quickPrintPanel.classList.remove("hidden");
+}
+
+async function handlePrintScan(rawCode) {
+  const code = normalizeCaseCode(rawCode);
+  if (!code) {
+    showStatus("That doesn't look like a Case ID tag.", false);
+    return;
+  }
+  const caseData = await postJSON("/api/case/lookup", { case_code: code });
+  currentCaseCode = caseData.case_code;
+  currentCaseName = caseData.name || null;
+  stopCamera();
+  showQuickPrint(caseData.case_code, nameSuffix(currentCaseName));
+}
+
+// ==================== Find Decedent ====================
+let findDebounceTimer = null;
+
+findDecedentBtn.addEventListener("click", () => {
+  setMode("find");
+  findInput.value = "";
+  findResults.innerHTML = "";
+  findInput.focus();
+});
+findBackBtn.addEventListener("click", () => setMode("home"));
+
+findInput.addEventListener("input", () => {
+  clearTimeout(findDebounceTimer);
+  const q = findInput.value.trim();
+  if (!q) {
+    findResults.innerHTML = "";
+    return;
+  }
+  findDebounceTimer = setTimeout(async () => {
+    try {
+      const res = await fetch(`/api/cases/search?q=${encodeURIComponent(q)}`);
+      const matches = await res.json();
+      renderFindResults(matches);
+    } catch (err) {
+      findResults.innerHTML = `<p class="status-msg err" style="margin:0;">${escapeHtmlLocal(err.message)}</p>`;
+    }
+  }, 250);
+});
+
+function renderFindResults(matches) {
+  if (matches.length === 0) {
+    findResults.innerHTML = `<p style="color:#889; margin:0;">No matches.</p>`;
+    return;
+  }
+  findResults.innerHTML = matches
+    .map(
+      (m) => `
+      <div class="inventory-row">
+        <div class="inventory-info">
+          <div><b>${escapeHtmlLocal(m.name || m.case_code)}</b></div>
+          <div style="color:#889; font-size:12.5px;">${escapeHtmlLocal(m.case_code)}${m.funeral_home ? " — " + escapeHtmlLocal(m.funeral_home) : ""}</div>
+        </div>
+        <button class="find-select-btn" data-case="${escapeHtmlLocal(m.case_code)}" style="padding:8px 14px; background:#2a5d8a; color:#fff; border:none; border-radius:6px;">Select</button>
+      </div>`
+    )
+    .join("");
+  findResults.querySelectorAll(".find-select-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const code = btn.dataset.case;
+      mode = "smart";
+      findPanel.classList.add("hidden");
+      scanPanel.classList.remove("hidden");
+      try {
+        await handleSmartCaseScan(code);
+      } catch (err) {
+        showStatus(err.message, false);
+      }
+    });
+  });
 }
 
 saveInfoBtn.addEventListener("click", async () => {
@@ -666,6 +1041,21 @@ saveInfoBtn.addEventListener("click", async () => {
       const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
       showTagLinkStep(currentCaseCode, nameSuffix(currentCaseName));
       if (warning) showStatus(`Saved${warning}. Scan the physical tag to link it.`, false);
+    } catch (err) {
+      showStatus(err.message, false);
+    }
+    return;
+  }
+
+  if (mode === "edit") {
+    try {
+      await postJSON(`/api/case/${encodeURIComponent(currentCaseCode)}/info`, body);
+      currentCaseName = body.name || null;
+      infoForm.classList.add("hidden");
+      showStatus(`${currentCaseCode} updated.`, true);
+      const caseData = await postJSON("/api/case/lookup", { case_code: currentCaseCode });
+      mode = "smart";
+      renderSmartCaseActions(caseData);
     } catch (err) {
       showStatus(err.message, false);
     }
@@ -703,7 +1093,7 @@ async function doRelease() {
 
 releaseReceiptBtn.addEventListener("click", () => {
   releaseReceiptGate.classList.add("hidden");
-  resetFlow();
+  finishFlow();
 });
 
 async function doCremate() {
@@ -716,7 +1106,7 @@ async function doCremate() {
     });
     const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
     showStatus(`${currentCaseCode} marked as cremated.${warning}`, !result.sheet_warning);
-    setTimeout(resetFlow, 1400);
+    setTimeout(finishFlow, 1400);
   } catch (err) {
     showStatus(err.message, false);
   }
@@ -755,7 +1145,7 @@ confirmCheckoutBtn.addEventListener("click", async () => {
     });
     const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
     showStatus(`${currentCaseCode} checked out.${warning}`, !result.sheet_warning);
-    setTimeout(resetFlow, 1400);
+    setTimeout(finishFlow, 1400);
   } catch (err) {
     showStatus(err.message, false);
   }
@@ -992,6 +1382,189 @@ addInventoryBtn.addEventListener("click", async () => {
     inventoryStatus.className = "status-msg err";
   } finally {
     addInventoryBtn.disabled = false;
+  }
+});
+
+// ==================== Documents (face sheets, first call sheets, etc.) ====================
+// Same multi-capture camera pattern as Inventory above, just for scanned
+// paperwork instead of personal effects -- its own independent
+// stream/video/canvas/pending-queue so the two never interfere.
+function renderDocumentsList(items) {
+  if (items.length === 0) {
+    documentsList.innerHTML = `<p style="color:#889; margin:0;">No documents scanned yet.</p>`;
+    return;
+  }
+  documentsList.innerHTML = items
+    .map(
+      (item) => `
+    <div class="inventory-row">
+      <img class="inventory-thumb" src="/api/documents/${item.id}/photo" alt="">
+      <div class="inventory-info">
+        <div>${escapeHtmlLocal(item.doc_type || "(untitled document)")}</div>
+        <div style="color:#889; font-size:12.5px;">${escapeHtmlLocal(item.when)}${item.staff ? " — " + escapeHtmlLocal(item.staff) : ""}</div>
+      </div>
+      <button class="document-delete-btn" data-id="${item.id}">Delete</button>
+    </div>`
+    )
+    .join("");
+
+  documentsList.querySelectorAll(".document-delete-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const docId = btn.dataset.id;
+      askConfirm("Delete this document? This can't be undone.", async () => {
+        try {
+          const res = await fetch(`/api/documents/${docId}/delete`, { method: "POST" });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Delete failed");
+          renderDocumentsList(data.items);
+        } catch (err) {
+          documentsStatus.textContent = err.message;
+          documentsStatus.className = "status-msg err";
+        }
+      });
+    });
+  });
+}
+
+async function loadDocuments(code) {
+  try {
+    const res = await fetch(`/api/case/${encodeURIComponent(code)}/documents`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Couldn't load documents");
+    renderDocumentsList(data.items);
+  } catch (err) {
+    documentsList.innerHTML = "";
+    documentsStatus.textContent = err.message;
+    documentsStatus.className = "status-msg err";
+  }
+}
+
+async function startDocumentsCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    documentsStatus.textContent = "Camera not available on this device/browser.";
+    documentsStatus.className = "status-msg err";
+    return;
+  }
+  try {
+    documentsCameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+    });
+  } catch (err) {
+    documentsStatus.textContent = "Camera permission denied or unavailable: " + err.message;
+    documentsStatus.className = "status-msg err";
+    return;
+  }
+  documentsCameraVideo.srcObject = documentsCameraStream;
+  documentsCameraVideo.muted = true;
+  await documentsCameraVideo.play();
+  documentsCameraPanel.classList.remove("hidden");
+  documentsCameraBtn.classList.add("hidden");
+}
+
+function stopDocumentsCamera() {
+  if (documentsCameraStream) {
+    documentsCameraStream.getTracks().forEach((t) => t.stop());
+    documentsCameraStream = null;
+  }
+  documentsCameraPanel.classList.add("hidden");
+  documentsCameraBtn.classList.remove("hidden");
+}
+
+function captureDocumentsPhoto() {
+  if (!documentsCameraStream) return;
+  const ctx = documentsCameraCanvas.getContext("2d");
+  documentsCameraCanvas.width = documentsCameraVideo.videoWidth;
+  documentsCameraCanvas.height = documentsCameraVideo.videoHeight;
+  ctx.drawImage(documentsCameraVideo, 0, 0, documentsCameraCanvas.width, documentsCameraCanvas.height);
+  documentsCameraCanvas.toBlob(
+    (blob) => {
+      documentsPendingCaptures.push({ blob, url: URL.createObjectURL(blob), capturedAt: new Date() });
+      renderDocumentsPendingCaptures();
+    },
+    "image/jpeg",
+    0.85
+  );
+}
+
+function renderDocumentsPendingCaptures() {
+  if (documentsPendingCaptures.length === 0) {
+    documentsPendingList.classList.add("hidden");
+    documentsPendingList.innerHTML = "";
+  } else {
+    documentsPendingList.classList.remove("hidden");
+    documentsPendingList.innerHTML = documentsPendingCaptures
+      .map(
+        (c, i) => `
+      <div class="inventory-pending-item">
+        <img src="${c.url}" alt="Captured document page">
+        <div class="pending-time">${c.capturedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+        <button type="button" class="pending-remove-btn" data-index="${i}">✕</button>
+      </div>`
+      )
+      .join("");
+    documentsPendingList.querySelectorAll(".pending-remove-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const i = parseInt(btn.dataset.index, 10);
+        URL.revokeObjectURL(documentsPendingCaptures[i].url);
+        documentsPendingCaptures.splice(i, 1);
+        renderDocumentsPendingCaptures();
+      });
+    });
+  }
+  addDocumentBtn.textContent = documentsPendingCaptures.length > 1 ? `Add ${documentsPendingCaptures.length} Documents` : "Add Document";
+}
+
+function clearDocumentsPendingCaptures() {
+  stopDocumentsCamera();
+  documentsPendingCaptures.forEach((c) => URL.revokeObjectURL(c.url));
+  documentsPendingCaptures = [];
+  renderDocumentsPendingCaptures();
+}
+
+documentsCameraBtn.addEventListener("click", startDocumentsCamera);
+documentsCameraStopBtn.addEventListener("click", stopDocumentsCamera);
+documentsCameraVideo.addEventListener("click", captureDocumentsPhoto);
+
+addDocumentBtn.addEventListener("click", async () => {
+  if (!currentCaseCode) return;
+  const docType = documentsType.value.trim();
+  if (documentsPendingCaptures.length === 0) {
+    documentsStatus.textContent = "Take at least one photo of the document.";
+    documentsStatus.className = "status-msg err";
+    return;
+  }
+
+  addDocumentBtn.disabled = true;
+  const toSave = documentsPendingCaptures.length;
+  let lastItems = null;
+  try {
+    for (let i = 0; i < documentsPendingCaptures.length; i++) {
+      const capture = documentsPendingCaptures[i];
+      documentsStatus.textContent = toSave > 1 ? `Saving ${i + 1} of ${toSave}...` : "Saving...";
+      documentsStatus.className = "status-msg";
+      const body = new FormData();
+      body.append("doc_type", docType);
+      body.append("photo", capture.blob, "document.jpg");
+      body.append("captured_at", formatTimestampForServer(capture.capturedAt));
+      const res = await fetch(`/api/case/${encodeURIComponent(currentCaseCode)}/documents`, {
+        method: "POST",
+        body,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Couldn't save document");
+      lastItems = data.items;
+    }
+    renderDocumentsList(lastItems);
+    documentsType.value = "";
+    clearDocumentsPendingCaptures();
+    documentsStatus.textContent = toSave > 1 ? `${toSave} documents added.` : "Document added.";
+    documentsStatus.className = "status-msg ok";
+  } catch (err) {
+    if (lastItems) renderDocumentsList(lastItems);
+    documentsStatus.textContent = err.message;
+    documentsStatus.className = "status-msg err";
+  } finally {
+    addDocumentBtn.disabled = false;
   }
 });
 

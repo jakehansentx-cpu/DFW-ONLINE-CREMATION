@@ -68,6 +68,10 @@ CASE_FLAGS = [
 # static files.
 INVENTORY_PHOTOS_DIR = "inventory_photos"
 
+# Same idea as INVENTORY_PHOTOS_DIR, but for scanned paperwork (face
+# sheets, first call sheets, etc.) instead of personal effects photos.
+CASE_DOCUMENTS_DIR = "case_documents"
+
 # Google Sheets integration for intake. Set GOOGLE_SHEETS_ENABLED to True
 # once you've done the service account setup (see README) and dropped the
 # downloaded JSON key file in this folder.
