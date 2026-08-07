@@ -1243,11 +1243,29 @@ def case_print_cremation_page(case_code):
     row = get_case_with_location(db, case_code)
     if row is None:
         return jsonify(error="Unknown case code -- start intake first"), 404
+
+    # When they arrived at their CURRENT shelf -- since this tag is only
+    # offered while a decedent sits in Cremation Staging, that's the
+    # placed/moved event that brought them there.
+    staged_since = None
+    move_row = db.execute(
+        "SELECT timestamp FROM moves WHERE case_id = ? AND action IN ('placed', 'moved') "
+        "ORDER BY timestamp DESC, id DESC LIMIT 1",
+        (row["id"],),
+    ).fetchone()
+    if move_row:
+        try:
+            dt = datetime.strptime(move_row["timestamp"], "%Y-%m-%d %H:%M:%S")
+            staged_since = f"{dt.month}/{dt.day}/{dt.strftime('%y')}"
+        except ValueError:
+            pass
+
     return render_template(
         "case_print_cremation.html",
         case=row,
         case_code=case_code,
         pickup_date=format_date_for_sheet(row["pickup_date"]),
+        staged_since=staged_since,
     )
 
 

@@ -6,11 +6,11 @@
 <title>Cremation Sticker — {{ case_code }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 <style>
-  /* Avery 5146: 4" x 6" sheet, 2 badges (2-5/16" x 3-3/8" each). Avery
-     doesn't publish exact margins anywhere we could pull from
-     automatically, so the same content is printed in both halves of the
-     sheet -- lands correctly regardless of which half the real badge
-     falls in, and the other copy is a usable spare. */
+  /* Avery 5146: 4" x 6" sheet, badge cut at the top half. Only one copy
+     is printed (the sheet's second badge position is left blank) -- the
+     badge box has no fixed/max height, so it sizes to its own content
+     instead of being squeezed to fit, which is what clipped the text
+     before. */
   @page { size: 4in 6in; margin: 0; }
 
   .print-toolbar { text-align: center; padding: 16px; }
@@ -18,6 +18,7 @@
 
   #sheet {
     width: 4in;
+    height: 6in;
     margin: 0 auto;
     background: #fff;
   }
@@ -31,8 +32,6 @@
   }
   .badge {
     width: 2.3125in;
-    height: 3.375in;
-    max-height: 2.9in;
     box-sizing: border-box;
     padding: 0.15in;
     color: #14151a;
@@ -40,13 +39,14 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.08in;
+    gap: 0.09in;
   }
-  .badge .qr-box { width: 1.5in; height: 1.5in; }
+  .badge .qr-box { width: 1.5in; height: 1.5in; flex-shrink: 0; }
   .badge .qr-box img { width: 100%; height: 100%; display: block; }
   .badge .line-name,
   .badge .line-home,
-  .badge .line-date {
+  .badge .line-date,
+  .badge .line-staged {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
     font-weight: 700;
     text-align: center;
@@ -54,14 +54,15 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    flex-shrink: 0;
   }
-  .badge .line-name { font-size: 14pt; line-height: 1.15; }
-  .badge .line-home { font-size: 10pt; line-height: 1.15; }
-  .badge .line-date { font-size: 9pt; color: #4a4d54; }
-  .badge .line-code { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 8pt; color: #6a6d74; margin-top: 0.05in; }
-  .badge .line-cremation {
+  .badge .line-name { font-size: 15pt; line-height: 1.3; }
+  .badge .line-home { font-size: 11pt; line-height: 1.3; }
+  .badge .line-date { font-size: 10pt; line-height: 1.3; color: #4a4d54; font-weight: 600; }
+  .badge .line-staged { font-size: 9pt; line-height: 1.3; color: #4a4d54; font-weight: 600; }
+  .badge .line-code {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-weight: 700; font-size: 10pt; color: #7a2d2d; text-align: center; margin-top: 0.05in;
+    font-size: 8pt; color: #6a6d74; margin-top: 0.05in; flex-shrink: 0;
   }
 
   @media print {
@@ -75,11 +76,10 @@
 <body class="scan-body">
   <div class="print-toolbar">
     <button class="primary-btn" onclick="window.print()">Print Cremation Sticker</button>
-    <p>Sized for Avery 5146 name badge sheets (4" x 6", 2 per sheet). Prints in both badge positions so it lines up either way.</p>
+    <p>Sized for Avery 5146 name badge sheets (4" x 6"). Prints one badge in the top position; the bottom position is left blank.</p>
   </div>
 
   <div id="sheet">
-    {% for _ in range(2) %}
     <div class="badge-half">
       <div class="badge">
         <div class="qr-box">
@@ -87,12 +87,11 @@
         </div>
         <div class="line-name">{{ case.name or case_code }}</div>
         {% if case.funeral_home %}<div class="line-home">{{ case.funeral_home }}</div>{% endif %}
-        {% if pickup_date %}<div class="line-date">{{ pickup_date }}</div>{% endif %}
+        {% if pickup_date %}<div class="line-date">Pickup: {{ pickup_date }}</div>{% endif %}
+        {% if staged_since %}<div class="line-staged">Moved to Staging: {{ staged_since }}</div>{% endif %}
         <div class="line-code">{{ case_code }}</div>
-        <div class="line-cremation">CREMATION CONTAINER</div>
       </div>
     </div>
-    {% endfor %}
   </div>
 
   <script>
@@ -109,6 +108,7 @@
         autoFitLine(badge.querySelector(".line-name"), 8);
         autoFitLine(badge.querySelector(".line-home"), 6);
         autoFitLine(badge.querySelector(".line-date"), 6);
+        autoFitLine(badge.querySelector(".line-staged"), 6);
       });
     });
   </script>
