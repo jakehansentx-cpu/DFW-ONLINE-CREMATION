@@ -370,6 +370,7 @@ function showPrintGate(code, nameTag) {
 function advancePastPrintGate() {
   printGate.classList.add("hidden");
   startSheetCaseBtn.classList.add("hidden");
+  cameraBtn.classList.remove("hidden");
   step = "location";
   stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}${nameSuffix(currentCaseName)}`;
   showStatus("Scan a slot location.", true);
@@ -393,14 +394,17 @@ startSheetCaseBtn.addEventListener("click", async () => {
     const result = await postJSON("/api/sheet-intake/start", {}, 25000);
     currentCaseCode = result.case_code;
     currentSheetRow = result.sheet_row;
+    // Nothing to print or scan yet at this point -- both come later,
+    // gated behind Save, so hide them rather than showing every step's
+    // controls at once (see showPrintGate/advancePastPrintGate below).
+    startSheetCaseBtn.classList.add("hidden");
+    cameraBtn.classList.add("hidden");
+    cameraPanel.classList.add("hidden");
+    stepLabel.textContent = currentCaseCode;
     infoFormTitle.textContent = `Case ${currentCaseCode} (from sheet, row ${currentSheetRow})`;
     infoForm.classList.remove("hidden");
     clearInfoForm();
     saveInfoBtn.textContent = "Save (writes to sheet + this app)";
-    printTagLink.href = `/case/${encodeURIComponent(currentCaseCode)}/print`;
-    printTagLink.classList.remove("hidden");
-    printLabelLink.href = `/case/${encodeURIComponent(currentCaseCode)}/print-label`;
-    printLabelLink.classList.remove("hidden");
     showStatus(`Pulled ${currentCaseCode} from the sheet. Fill in details.`, true);
   } catch (err) {
     showStatus(err.message, false);
