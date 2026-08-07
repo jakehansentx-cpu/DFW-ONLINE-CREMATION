@@ -13,10 +13,9 @@ camera can open it directly:
 
 Sized for Avery 5161 (also sold as 5261/5909/5961/8161/8461) label sheets --
 1" x 4", 20 per sheet, 2 columns x 10 rows -- to fit the ~1 1/4" x 3 7/8"
-label area on the ankle bands. Each label gets the QR code plus the
-FIELD-### code printed as text, for a human-readable fallback if a scan
-ever fails -- nothing else (no blank lines; staff write the name/funeral
-home/date directly on the band, not on the sticker).
+label area on the ankle bands. Each label is QR code only, nothing else
+-- no code text, no blank lines; staff write the name/funeral home/date
+directly on the band, not on the sticker.
 
 Usage:
     python gen_field_tags.py                -- 50 tags (FIELD-001..FIELD-050)
@@ -78,15 +77,9 @@ def build_field_tag_sheet(filename, codes):
         label_y = page_h - TOP_MARGIN - (row + 1) * LABEL_H
 
         qr_img = make_qr_image(f"{config.PUBLIC_HOST}/case/{code}")
-        qr_margin = (LABEL_H - QR_SIZE) / 2
-        qr_x = label_x + qr_margin
-        qr_y = label_y + qr_margin
+        qr_x = label_x + (LABEL_W - QR_SIZE) / 2
+        qr_y = label_y + (LABEL_H - QR_SIZE) / 2
         c.drawImage(qr_img, qr_x, qr_y, width=QR_SIZE, height=QR_SIZE)
-
-        c.setFont("Helvetica-Bold", 16)
-        text_x = qr_x + QR_SIZE + (0.15 * inch)
-        text_y = label_y + LABEL_H / 2 - 6
-        c.drawString(text_x, text_y, code)
 
     c.save()
 
