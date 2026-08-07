@@ -430,7 +430,7 @@ function showDetail(loc, coolerName, shelfNum) {
           <button class="move-staging-btn" data-case="${escapeHtml(o.case_code)}">🔥 Move to Cremation Staging</button>
         </div>
         ${currentScreen === "Cremation Staging" ? `
-        <a class="secondary-btn" href="/case/${encodeURIComponent(o.case_code)}/print-cremation-sticker" target="_blank" rel="noopener" style="display:block; text-decoration:none; text-align:center; margin-top:8px;">🖨️ Print Cremation Sticker</a>
+        <a class="secondary-btn" href="/case/${encodeURIComponent(o.case_code)}/print-cremation-sticker" target="_blank" rel="noopener" style="display:block; text-decoration:none; text-align:center; margin-top:8px;">🖨️ Print Cremation Tag (Office Printer)</a>
         ` : ""}
         <div class="release-actions" data-case="${escapeHtml(o.case_code)}">
           <button class="release-btn" data-case="${escapeHtml(o.case_code)}">📤 Release</button>
@@ -727,6 +727,9 @@ function renderHistoryBlock(caseCode, name, data) {
         <p class="case-line"><b>Case:</b> ${escapeHtml(caseCode)}</p>
         <img class="case-qr-thumb" src="/case/${encodeURIComponent(caseCode)}/qr.png" alt="QR code for ${escapeHtml(caseCode)}">
       </div>
+      ${currentScreen === "Cremation Staging" ? `
+      <a class="secondary-btn" href="/case/${encodeURIComponent(caseCode)}/print-cremation-sticker" target="_blank" rel="noopener" style="display:block; text-decoration:none; text-align:center; margin-top:4px;">🖨️ Print Cremation Tag (Office Printer)</a>
+      ` : ""}
       <div class="history-flags">${flagRows}</div>
       <h3>History</h3>
       <div class="history-list">${historyRows}</div>
