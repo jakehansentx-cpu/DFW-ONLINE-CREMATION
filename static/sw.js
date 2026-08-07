@@ -1,4 +1,4 @@
-const CACHE_NAME = "cooler-scan-shell-v6";
+const CACHE_NAME = "cooler-scan-shell-v7";
 const SHELL_FILES = [
   "/scan",
   "/static/style.css",
@@ -33,19 +33,26 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // App shell: cache-first, falling back to network, then updating the cache.
+  // App shell: network-first, falling back to the cached copy only if the
+  // network request fails (offline). This used to be cache-first, which
+  // caches each shell file independently -- that let a phone end up with,
+  // say, an old cached /scan page paired with a newer cached scan.js (or
+  // vice versa) after a deploy, since each file could get refreshed at a
+  // different time. A JS error from that mismatch (a button element the
+  // old HTML doesn't have yet, referenced by the new script) can silently
+  // break every button on the page. Trying the network first means normal
+  // online use always gets the current, matched set of files straight
+  // from the server; the cache is purely a fallback for working with no
+  // signal at all (see README).
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const fetchPromise = fetch(event.request)
-        .then((response) => {
-          if (response && response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-          return response;
-        })
-        .catch(() => cached);
-      return cached || fetchPromise;
-    })
+    fetch(event.request)
+      .then((response) => {
+        if (response && response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
