@@ -1393,9 +1393,11 @@ def api_board():
     rows = db.execute(
         """
         SELECT l.code AS location_code, l.cooler_name, l.cooler_code, l.shelf, l.slot, l.shared,
-               l.screen, c.case_code, c.name, c.funeral_home, c.pickup_date, c.status, c.created_at
+               l.screen, c.case_code, c.name, c.funeral_home, c.pickup_date, c.status, c.created_at,
+               ta.real_case_code
         FROM locations l
         LEFT JOIN cases c ON c.location_id = l.id AND c.status = 'placed'
+        LEFT JOIN tag_aliases ta ON ta.placeholder_code = c.case_code
         ORDER BY l.cooler_order, l.shelf, l.slot
         """
     ).fetchall()

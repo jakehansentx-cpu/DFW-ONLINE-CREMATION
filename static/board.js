@@ -304,6 +304,7 @@ function renderBoard(rows) {
     if (r.case_code) {
       loc.occupants.push({
         case_code: r.case_code,
+        real_case_code: r.real_case_code,
         name: r.name,
         funeral_home: r.funeral_home,
         pickup_date: r.pickup_date,
@@ -410,8 +411,42 @@ function showDetail(loc, coolerName, shelfNum) {
     `;
   } else {
     const blocks = loc.occupants
-      .map(
-        (o, i) => `
+      .map((o, i) => {
+        const isCremStaging = currentScreen === "Cremation Staging";
+        const displayCode = isCremStaging && o.real_case_code ? o.real_case_code : o.case_code;
+
+        // Cremation Staging is a view-and-act popup, not an edit form --
+        // no Save (editing happens on the sheet or scan station), and no
+        // Release/Check Out since Cremate is the only exit from here that
+        // makes sense; Move to New Location stays in case a decedent needs
+        // to go back to a cooler instead.
+        if (isCremStaging) {
+          return `
+      <div class="occupant-block">
+        <div class="case-qr-row">
+          <p class="case-line"><b>Case:</b> ${escapeHtml(displayCode)}</p>
+          <img class="case-qr-thumb" src="/case/${encodeURIComponent(o.case_code)}/qr.png" alt="QR code for ${escapeHtml(displayCode)}">
+        </div>
+        <p class="case-line"><b>Name:</b> ${escapeHtml(o.name || "—")}</p>
+        <p class="case-line"><b>Funeral Home:</b> ${escapeHtml(o.funeral_home || "—")}</p>
+        <p class="case-line"><b>Pickup Date:</b> ${escapeHtml(formatDate(o.pickup_date) || "—")}</p>
+        <a class="secondary-btn" href="/case/${encodeURIComponent(o.case_code)}/print-cremation-sticker" target="_blank" rel="noopener" style="display:block; text-decoration:none; text-align:center; margin-top:14px;">🖨️ Print Cremation Tag (Office Printer)</a>
+        <div class="cremate-actions" data-case="${escapeHtml(o.case_code)}">
+          <button class="cremate-btn" data-case="${escapeHtml(o.case_code)}">🔥 Cremate</button>
+        </div>
+        <div class="cremate-form-inline hidden" data-case="${escapeHtml(o.case_code)}">
+          <label>Disk Number</label>
+          <input type="text" class="disk-number-input" data-case="${escapeHtml(o.case_code)}" placeholder="Cremation disk number" inputmode="numeric">
+          <button class="confirm-cremate-btn primary-btn" data-case="${escapeHtml(o.case_code)}" style="background:#5c2a2a;">Confirm Cremation</button>
+          <button class="cancel-cremate-btn secondary-btn" data-case="${escapeHtml(o.case_code)}">Cancel</button>
+        </div>
+        <div class="move-actions">
+          <button class="move-here-btn" data-case="${escapeHtml(o.case_code)}">📍 Move to New Location</button>
+        </div>
+      </div>`;
+        }
+
+        return `
       <div class="occupant-block">
         <div class="case-qr-row">
           <p class="case-line"><b>Case:</b> ${escapeHtml(o.case_code)}</p>
@@ -425,21 +460,9 @@ function showDetail(loc, coolerName, shelfNum) {
         <input type="date" class="edit-date" data-case="${escapeHtml(o.case_code)}" value="${escapeHtml(o.pickup_date || "")}">
         <button class="save-occupant-btn" data-case="${escapeHtml(o.case_code)}" data-index="${i}">Save</button>
         <div class="save-status" data-index="${i}"></div>
-        ${currentScreen === "Cremation Staging" ? `
-        <a class="secondary-btn" href="/case/${encodeURIComponent(o.case_code)}/print-cremation-sticker" target="_blank" rel="noopener" style="display:block; text-decoration:none; text-align:center; margin-top:8px;">🖨️ Print Cremation Tag (Office Printer)</a>
-        <div class="cremate-actions" data-case="${escapeHtml(o.case_code)}">
-          <button class="cremate-btn" data-case="${escapeHtml(o.case_code)}" style="margin-top:8px; background:#5c2a2a; color:#fff;">🔥 Cremate</button>
-        </div>
-        <div class="cremate-form-inline hidden" data-case="${escapeHtml(o.case_code)}">
-          <label>Disk Number</label>
-          <input type="text" class="disk-number-input" data-case="${escapeHtml(o.case_code)}" placeholder="Cremation disk number" inputmode="numeric">
-          <button class="confirm-cremate-btn primary-btn" data-case="${escapeHtml(o.case_code)}" style="background:#5c2a2a;">Confirm Cremation</button>
-          <button class="cancel-cremate-btn secondary-btn" data-case="${escapeHtml(o.case_code)}">Cancel</button>
-        </div>
-        ` : ""}
         <div class="move-actions">
           <button class="move-here-btn" data-case="${escapeHtml(o.case_code)}">📍 Move to New Location</button>
-          ${currentScreen === "Cremation Staging" ? "" : `<button class="move-staging-btn" data-case="${escapeHtml(o.case_code)}">🔥 Move to Cremation Staging</button>`}
+          <button class="move-staging-btn" data-case="${escapeHtml(o.case_code)}">🔥 Move to Cremation Staging</button>
         </div>
         <div class="release-actions" data-case="${escapeHtml(o.case_code)}">
           <button class="release-btn" data-case="${escapeHtml(o.case_code)}">📤 Release</button>
@@ -471,8 +494,8 @@ function showDetail(loc, coolerName, shelfNum) {
           <button class="confirm-checkout-btn primary-btn" data-case="${escapeHtml(o.case_code)}">Confirm Check Out</button>
           <button class="cancel-checkout-btn secondary-btn" data-case="${escapeHtml(o.case_code)}">Cancel</button>
         </div>
-      </div>`
-      )
+      </div>`;
+      })
       .join("");
     content.innerHTML = `<h2>${escapeHtml(where)}${loc.occupants.length > 1 ? ` (${loc.occupants.length} occupants)` : ""}</h2>${blocks}`;
 

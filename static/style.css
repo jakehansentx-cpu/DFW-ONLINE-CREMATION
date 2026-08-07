@@ -169,6 +169,7 @@ body {
   margin-bottom: 8px;
 }
 .detail-card .case-line { margin: 0; text-align: center; }
+.detail-card p.case-line + p.case-line { margin-top: 6px; }
 .detail-card .case-qr-thumb {
   width: 140px; height: 140px; max-width: 100%;
   background: #fff; padding: 8px; border-radius: 8px; flex-shrink: 0;
@@ -187,6 +188,15 @@ body {
 }
 .detail-card .move-here-btn { background: #333; }
 .detail-card .move-staging-btn { background: #5c2a2a; }
+
+.detail-card .cremate-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.detail-card .cremate-btn {
+  padding: 10px; font-size: 14px; width: 100%; border: none; border-radius: 6px; color: #fff; background: #5c2a2a;
+}
+.detail-card .cremate-form-inline { margin-top: 10px; }
+.detail-card .cremate-form-inline.hidden { display: none; }
+.detail-card .cremate-form-inline .primary-btn { margin-top: 12px; }
+.detail-card .cremate-form-inline .secondary-btn { margin-top: 8px; }
 
 .detail-card .release-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .detail-card .release-btn, .detail-card .checkout-btn {
