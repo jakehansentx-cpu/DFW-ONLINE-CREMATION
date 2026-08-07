@@ -48,19 +48,11 @@ document.querySelectorAll(".detail-card-body, .board-confirm-card").forEach(enab
 let latestRows = [];
 let currentScreen = null;
 
-// "Who's working?" -- shared with the scan station via the same
-// localStorage key, so picking a name once on either page carries over.
-const STAFF_STORAGE_KEY = "cooler_staff_name";
-const staffSelect = document.getElementById("staffSelect");
-const savedStaff = localStorage.getItem(STAFF_STORAGE_KEY);
-if (savedStaff && [...staffSelect.options].some((o) => o.value === savedStaff)) {
-  staffSelect.value = savedStaff;
-}
-staffSelect.addEventListener("change", () => {
-  localStorage.setItem(STAFF_STORAGE_KEY, staffSelect.value);
-});
 function getStaffName() {
-  return staffSelect.value;
+  // Server re-derives this from the login session on every write anyway
+  // (see app.py) -- this is just for immediate UI text, not the source
+  // of truth for who's credited with an action.
+  return window.CURRENT_STAFF_NAME || "";
 }
 
 // Shared "are you sure?" gate for Release, same treatment it gets on the

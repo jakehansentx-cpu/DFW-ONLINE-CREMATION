@@ -28,11 +28,13 @@
 # You can mix both patterns within the same cooler (see ATC Back Cooler
 # below for an example: shelves 1-2 have A/B, shelf 3 does not).
 
-# Shared passcode required to view the board or use the scan station from
-# any device. Change this to something only your team knows -- anyone with
-# this passcode AND network access (LAN or Tailscale) can see decedent
-# names/funeral homes, so treat it like a real password, not a formality.
-ACCESS_PASSCODE = "Metro2026"
+# Per-person login replaced the old single shared passcode -- see the
+# `users` table in app.py. Everyone in STAFF_NAMES below gets an account
+# the first time the app starts with an empty database, all sharing this
+# same temporary password, forced to be changed on first login. Change
+# this value before that first run if you want a different starting
+# password (it's never used again after that first boot).
+INITIAL_TEMP_PASSWORD = "changeme123"
 
 # Pre-printed placeholder field tags (see gen_field_tags.py) all start with
 # this prefix (e.g. FIELD-001). The first time one is scanned, it gets
@@ -40,10 +42,10 @@ ACCESS_PASSCODE = "Metro2026"
 # api_case_lookup() in app.py.
 FIELD_TAG_PREFIX = "FIELD-"
 
-# Names shown in the "Who's working?" selector on the scan station. Picking
-# a name there just tags every Assign/Move/Release/Checkout/Check-in action
-# with who did it (stored in the moves table, visible on a case's History) --
-# not a real login, no password. Add/remove staff names here as needed.
+# Only used to seed the very first login(s) -- see INITIAL_TEMP_PASSWORD
+# above and the users table in app.py. Once accounts exist, staff are
+# added/removed from the admin page (/admin), not by editing this list;
+# it's never read again after that first successful boot.
 STAFF_NAMES = [
     "Jake Hansen",
 ]

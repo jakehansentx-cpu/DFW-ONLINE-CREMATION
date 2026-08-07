@@ -22,6 +22,7 @@ from functools import wraps
 from pathlib import Path
 from urllib.parse import quote
 from flask import Flask, g, jsonify, render_template, request, session, redirect, url_for
+from werkzeug.security import generate_password_hash, check_password_hash
 
 import qrcode
 from PIL import Image, ImageDraw, ImageFont
@@ -57,21 +58,70 @@ def login_required(view):
     def wrapped(*args, **kwargs):
         if not session.get("authed"):
             if request.path.startswith("/api/"):
-                return jsonify(error="Not logged in. Reload the page and enter the passcode."), 401
+                return jsonify(error="Not logged in. Reload the page and log in."), 401
             return redirect(url_for("login", next=request.path))
         return view(*args, **kwargs)
     return wrapped
+
+
+def admin_required(view):
+    """Combines login_required with an is_admin check -- used alone (not
+    stacked with login_required) on every /admin route. GET /admin
+    itself redirects a non-admin back to the board; every other admin
+    route is a JSON API, so it 401s/403s instead."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        is_api = request.path != "/admin"
+        if not session.get("authed"):
+            if is_api:
+                return jsonify(error="Not logged in."), 401
+            return redirect(url_for("login", next=request.path))
+        if not session.get("is_admin"):
+            if is_api:
+                return jsonify(error="Admin access required"), 403
+            return redirect(url_for("board_page"))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+@app.before_request
+def _require_password_change():
+    """Once logged in with a temporary or admin-reset password, every
+    page except the change-password form itself (and logout) redirects
+    there, so a forced reset can't just be skipped by navigating
+    elsewhere."""
+    if not session.get("authed") or not session.get("must_change_password"):
+        return
+    if request.endpoint in ("change_password", "logout", "static"):
+        return
+    if request.path.startswith("/api/"):
+        return jsonify(error="You must set a new password before continuing."), 403
+    return redirect(url_for("change_password"))
 
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     error = None
     if request.method == "POST":
-        if request.form.get("passcode") == config.ACCESS_PASSCODE:
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
+        db = get_db()
+        user = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        if user is None or not check_password_hash(user["password_hash"], password):
+            error = "Wrong name or password."
+        elif not user["active"]:
+            error = "This account has been disabled. See an admin."
+        else:
             session.permanent = True
             session["authed"] = True
+            session["username"] = user["username"]
+            session["is_admin"] = bool(user["is_admin"])
+            session["must_change_password"] = bool(user["must_change_password"])
+            db.execute("UPDATE users SET last_login_at = ? WHERE id = ?", (now(), user["id"]))
+            db.commit()
+            if user["must_change_password"]:
+                return redirect(url_for("change_password"))
             return redirect(request.args.get("next") or url_for("board_page"))
-        error = "Wrong passcode."
     return render_template("login.html", error=error)
 
 
@@ -79,6 +129,29 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+@app.route("/change-password", methods=["GET", "POST"])
+@login_required
+def change_password():
+    error = None
+    if request.method == "POST":
+        new_password = request.form.get("new_password") or ""
+        confirm_password = request.form.get("confirm_password") or ""
+        if len(new_password) < 6:
+            error = "Password must be at least 6 characters."
+        elif new_password != confirm_password:
+            error = "Passwords don't match."
+        else:
+            db = get_db()
+            db.execute(
+                "UPDATE users SET password_hash = ?, must_change_password = 0 WHERE username = ?",
+                (generate_password_hash(new_password), session["username"]),
+            )
+            db.commit()
+            session["must_change_password"] = False
+            return redirect(url_for("board_page"))
+    return render_template("change_password.html", error=error, forced=bool(session.get("must_change_password")))
 
 
 # ---------------------------------------------------------------- database --
@@ -214,6 +287,18 @@ def init_db():
             created_at TEXT NOT NULL,
             staff TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,  -- the staff member's name; never changes
+            password_hash TEXT NOT NULL,
+            is_admin INTEGER NOT NULL DEFAULT 0,
+            active INTEGER NOT NULL DEFAULT 1,  -- disabled (not deleted) once someone leaves,
+                                                 -- so their name stays intact on old history
+            must_change_password INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            last_login_at TEXT
+        );
         """
     )
     # Migrate DBs created before these columns existed.
@@ -294,6 +379,26 @@ def init_db():
     db.commit()
     if added:
         print(f"Added {added} new location(s) from config.py.")
+
+    # First run only: seed one login per name already in config.STAFF_NAMES,
+    # all with the same temporary password, forced to be changed on first
+    # login -- so there's never a chicken-and-egg problem where nobody can
+    # log in to create the first account. The first name becomes the
+    # initial admin, able to create/disable further accounts from there.
+    user_count = db.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
+    if user_count == 0 and config.STAFF_NAMES:
+        temp_hash = generate_password_hash(config.INITIAL_TEMP_PASSWORD)
+        for i, name in enumerate(config.STAFF_NAMES):
+            db.execute(
+                "INSERT INTO users (username, password_hash, is_admin, active, must_change_password, created_at) "
+                "VALUES (?, ?, ?, 1, 1, ?)",
+                (name, temp_hash, 1 if i == 0 else 0, now()),
+            )
+        db.commit()
+        print(
+            f"Seeded {len(config.STAFF_NAMES)} login(s) with temporary password "
+            f"'{config.INITIAL_TEMP_PASSWORD}' -- {config.STAFF_NAMES[0]} is the initial admin."
+        )
     db.close()
 
 
@@ -547,6 +652,86 @@ def get_case_history(db, case_id):
     return [{"when": _format_when(ts), "description": desc} for ts, desc in entries]
 
 
+def get_staff_history(db, username, limit=300):
+    """Every action a specific staff member has taken -- moves, status
+    flag changes, and inventory items -- across every case. Same
+    combined-timeline idea as get_case_history(), just filtered by who
+    did it instead of by which case; used on the admin page to verify a
+    specific person's actions."""
+    move_rows = db.execute(
+        """
+        SELECT m.action, m.timestamp, m.disk_number, c.case_code, c.name,
+               fl.cooler_name AS from_cooler, fl.shelf AS from_shelf, fl.slot AS from_slot,
+               tl.cooler_name AS to_cooler, tl.shelf AS to_shelf, tl.slot AS to_slot
+        FROM moves m
+        JOIN cases c ON c.id = m.case_id
+        LEFT JOIN locations fl ON fl.id = m.from_location_id
+        LEFT JOIN locations tl ON tl.id = m.to_location_id
+        WHERE m.staff = ?
+        ORDER BY m.timestamp DESC, m.id DESC
+        LIMIT ?
+        """,
+        (username, limit),
+    ).fetchall()
+
+    def _describe_released(m):
+        from_text = _move_location_text(m["from_cooler"], m["from_shelf"], m["from_slot"])
+        if m["disk_number"]:
+            return f"Cremated from {from_text} — Disk #{m['disk_number']}"
+        return f"Released from {from_text}"
+
+    descriptions = {
+        "placed": lambda m: f"Placed at {_move_location_text(m['to_cooler'], m['to_shelf'], m['to_slot'])}",
+        "moved": lambda m: (
+            f"Moved from {_move_location_text(m['from_cooler'], m['from_shelf'], m['from_slot'])} "
+            f"to {_move_location_text(m['to_cooler'], m['to_shelf'], m['to_slot'])}"
+        ),
+        "released": _describe_released,
+        "checked_out": lambda m: f"Checked out from {_move_location_text(m['from_cooler'], m['from_shelf'], m['from_slot'])}",
+        "checked_in": lambda m: "Checked in",
+    }
+
+    entries = []
+    for m in move_rows:
+        describe = descriptions.get(m["action"])
+        action_text = describe(m) if describe else m["action"]
+        entries.append((m["timestamp"], f"{m['case_code']} ({m['name'] or '—'}): {action_text}"))
+
+    event_rows = db.execute(
+        """
+        SELECT e.flag, e.value, e.timestamp, c.case_code, c.name
+        FROM case_events e
+        JOIN cases c ON c.id = e.case_id
+        WHERE e.staff = ?
+        ORDER BY e.timestamp DESC, e.id DESC
+        LIMIT ?
+        """,
+        (username, limit),
+    ).fetchall()
+    for e in event_rows:
+        entries.append(
+            (e["timestamp"], f"{e['case_code']} ({e['name'] or '—'}): {e['flag']}: {'Yes' if e['value'] else 'No'}")
+        )
+
+    inv_rows = db.execute(
+        """
+        SELECT i.description, i.created_at, i.photo_filename, c.case_code, c.name
+        FROM inventory_items i
+        JOIN cases c ON c.id = i.case_id
+        WHERE i.staff = ?
+        ORDER BY i.created_at DESC, i.id DESC
+        LIMIT ?
+        """,
+        (username, limit),
+    ).fetchall()
+    for i in inv_rows:
+        what = i["description"] or ("Photo" if i["photo_filename"] else "Inventory item")
+        entries.append((i["created_at"], f"{i['case_code']} ({i['name'] or '—'}): Inventory — {what}"))
+
+    entries.sort(key=lambda entry: entry[0], reverse=True)
+    return [{"when": _format_when(ts), "description": desc} for ts, desc in entries[:limit]]
+
+
 def get_case_flags(db, case_id):
     """Current Yes/No state of each configured decedent status flag
     (config.CASE_FLAGS), in config order -- a plain dict would work
@@ -783,19 +968,123 @@ def generate_cremation_tag_image(case_code, name, funeral_home, pickup_date, sta
 @app.route("/")
 @login_required
 def index():
-    return render_template("board.html", screens=config.BOARD_SCREENS, staff_names=config.STAFF_NAMES)
+    return render_template(
+        "board.html", screens=config.BOARD_SCREENS, username=session["username"], is_admin=session.get("is_admin")
+    )
 
 
 @app.route("/board")
 @login_required
 def board_page():
-    return render_template("board.html", screens=config.BOARD_SCREENS, staff_names=config.STAFF_NAMES)
+    return render_template(
+        "board.html", screens=config.BOARD_SCREENS, username=session["username"], is_admin=session.get("is_admin")
+    )
 
 
 @app.route("/scan")
 @login_required
 def scan_page():
-    return render_template("scan.html", staff_names=config.STAFF_NAMES)
+    return render_template("scan.html", username=session["username"], is_admin=session.get("is_admin"))
+
+
+@app.route("/admin")
+@admin_required
+def admin_page():
+    db = get_db()
+    rows = db.execute("SELECT * FROM users ORDER BY username COLLATE NOCASE").fetchall()
+    users = [
+        {
+            "id": r["id"],
+            "username": r["username"],
+            "is_admin": bool(r["is_admin"]),
+            "active": bool(r["active"]),
+            "must_change_password": bool(r["must_change_password"]),
+            "last_login_at": r["last_login_at"],
+        }
+        for r in rows
+    ]
+    return render_template("admin.html", users_json=jsonify(users).get_data(as_text=True), username=session["username"])
+
+
+@app.route("/admin/users/create", methods=["POST"])
+@admin_required
+def admin_create_user():
+    data = request.get_json(force=True)
+    username = (data.get("username") or "").strip()
+    is_admin = bool(data.get("is_admin"))
+    if not username:
+        return jsonify(error="Name is required"), 400
+
+    db = get_db()
+    existing = db.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone()
+    if existing:
+        return jsonify(error=f"{username} already has an account"), 409
+
+    cur = db.execute(
+        "INSERT INTO users (username, password_hash, is_admin, active, must_change_password, created_at) "
+        "VALUES (?, ?, ?, 1, 1, ?)",
+        (username, generate_password_hash(config.INITIAL_TEMP_PASSWORD), 1 if is_admin else 0, now()),
+    )
+    db.commit()
+    return jsonify(ok=True, id=cur.lastrowid, temp_password=config.INITIAL_TEMP_PASSWORD)
+
+
+@app.route("/admin/users/<int:user_id>/toggle-active", methods=["POST"])
+@admin_required
+def admin_toggle_active(user_id):
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if user is None:
+        return jsonify(error="Unknown user"), 404
+    if user["username"] == session["username"] and user["active"]:
+        return jsonify(error="You can't disable your own account while logged in as it"), 400
+
+    new_active = 0 if user["active"] else 1
+    db.execute("UPDATE users SET active = ? WHERE id = ?", (new_active, user_id))
+    db.commit()
+    return jsonify(ok=True, active=bool(new_active))
+
+
+@app.route("/admin/users/<int:user_id>/toggle-admin", methods=["POST"])
+@admin_required
+def admin_toggle_admin(user_id):
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if user is None:
+        return jsonify(error="Unknown user"), 404
+    if user["username"] == session["username"] and user["is_admin"]:
+        return jsonify(error="You can't remove your own admin access"), 400
+
+    new_is_admin = 0 if user["is_admin"] else 1
+    db.execute("UPDATE users SET is_admin = ? WHERE id = ?", (new_is_admin, user_id))
+    db.commit()
+    return jsonify(ok=True, is_admin=bool(new_is_admin))
+
+
+@app.route("/admin/users/<int:user_id>/reset-password", methods=["POST"])
+@admin_required
+def admin_reset_password(user_id):
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if user is None:
+        return jsonify(error="Unknown user"), 404
+
+    db.execute(
+        "UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?",
+        (generate_password_hash(config.INITIAL_TEMP_PASSWORD), user_id),
+    )
+    db.commit()
+    return jsonify(ok=True, temp_password=config.INITIAL_TEMP_PASSWORD)
+
+
+@app.route("/admin/users/<int:user_id>/history")
+@admin_required
+def admin_user_history(user_id):
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if user is None:
+        return jsonify(error="Unknown user"), 404
+    return jsonify(username=user["username"], history=get_staff_history(db, user["username"]))
 
 
 def expected_sheet_name(dt):
@@ -1120,7 +1409,7 @@ def api_set_case_flag(case_code):
     data = request.get_json(force=True)
     flag = (data.get("flag") or "").strip()
     value = bool(data.get("value"))
-    staff = (data.get("staff") or "").strip()
+    staff = session.get("username") or ""
 
     if flag not in config.CASE_FLAGS:
         return jsonify(error="Unknown status flag"), 400
@@ -1176,7 +1465,7 @@ def api_add_inventory(case_code):
         return jsonify(error="Unknown case code"), 404
 
     description = (request.form.get("description") or "").strip()
-    staff = (request.form.get("staff") or "").strip()
+    staff = session.get("username") or ""
     photo = request.files.get("photo")
     captured_at = (request.form.get("captured_at") or "").strip()
 
@@ -1665,7 +1954,7 @@ def api_assign():
     data = request.get_json(force=True)
     case_code = data.get("case_code")
     location_code = data.get("location_code")
-    staff = (data.get("staff") or "").strip()
+    staff = session.get("username") or ""
     db = get_db()
 
     case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
@@ -1721,7 +2010,7 @@ def api_move():
     data = request.get_json(force=True)
     case_code = data.get("case_code")
     location_code = data.get("location_code")
-    staff = (data.get("staff") or "").strip()
+    staff = session.get("username") or ""
     db = get_db()
 
     case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
@@ -1755,7 +2044,7 @@ def api_move_to_staging():
     needing to scan/tap a specific destination location."""
     data = request.get_json(force=True)
     case_code = data.get("case_code")
-    staff = (data.get("staff") or "").strip()
+    staff = session.get("username") or ""
     db = get_db()
 
     case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
@@ -1793,7 +2082,7 @@ def api_release():
     case_code = data.get("case_code")
     cremated = bool(data.get("cremated"))
     released_to = "Cremated" if cremated else (data.get("released_to") or "").strip()
-    staff = (data.get("staff") or "").strip()
+    staff = session.get("username") or ""
     signed_name = (data.get("signed_name") or "").strip()
     signature = data.get("signature") or None
     disk_number = (data.get("disk_number") or "").strip() if cremated else None
@@ -1849,7 +2138,7 @@ def api_checkout():
     case_code = data.get("case_code")
     org = (data.get("organization") or "").strip()
     reason = (data.get("reason") or "").strip()
-    staff = (data.get("staff") or "").strip()
+    staff = session.get("username") or ""
     db = get_db()
 
     case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
@@ -1899,7 +2188,7 @@ def api_checkin():
     fresh location scan, same as any other not-yet-placed case."""
     data = request.get_json(force=True)
     case_code = data.get("case_code")
-    staff = (data.get("staff") or "").strip()
+    staff = session.get("username") or ""
     db = get_db()
 
     case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()

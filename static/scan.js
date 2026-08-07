@@ -40,7 +40,6 @@ const confirmBox = document.getElementById("confirmBox");
 const confirmMessage = document.getElementById("confirmMessage");
 const confirmYesBtn = document.getElementById("confirmYesBtn");
 const confirmNoBtn = document.getElementById("confirmNoBtn");
-const staffSelect = document.getElementById("staffSelect");
 const inventoryPanel = document.getElementById("inventoryPanel");
 const inventoryTitle = document.getElementById("inventoryTitle");
 const inventoryList = document.getElementById("inventoryList");
@@ -59,18 +58,6 @@ let inventoryCameraStream = null;
 let pendingCaptures = [];
 const addInventoryBtn = document.getElementById("addInventoryBtn");
 const inventoryStatus = document.getElementById("inventoryStatus");
-
-// "Who's working?" is picked once per shift and remembered across page
-// reloads -- not a login, just tags every Assign/Move/Release/Checkout/
-// Check-in action with who did it (see the case History view).
-const STAFF_STORAGE_KEY = "cooler_staff_name";
-const savedStaff = localStorage.getItem(STAFF_STORAGE_KEY);
-if (savedStaff && [...staffSelect.options].some((o) => o.value === savedStaff)) {
-  staffSelect.value = savedStaff;
-}
-staffSelect.addEventListener("change", () => {
-  localStorage.setItem(STAFF_STORAGE_KEY, staffSelect.value);
-});
 
 // ---------------- Monthly spreadsheet ----------------
 // A new call log spreadsheet gets generated every month. New intakes
@@ -242,7 +229,10 @@ function getSignatureDataUrl() {
 }
 
 function getStaffName() {
-  return staffSelect.value;
+  // Server re-derives this from the login session on every write anyway
+  // (see app.py) -- this is just for immediate UI text, not the source
+  // of truth for who's credited with an action.
+  return window.CURRENT_STAFF_NAME || "";
 }
 
 // Declared here (not down by the rest of the camera code) because

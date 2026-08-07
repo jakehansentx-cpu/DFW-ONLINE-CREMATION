@@ -4,19 +4,37 @@ Fully local, no internet involved anywhere. Runs off a Python web server on
 whatever machine you host it on (Raspberry Pi, mini PC, old laptop) and is
 viewed over your own local WiFi/LAN.
 
-## Passcode protection
+## Login (per-person accounts)
 
-Every page and every API call requires a shared passcode before it works
-— set it in `config.py`:
-```python
-ACCESS_PASSCODE = "changeme123"
-```
-**Change this before real use.** Anyone with the passcode and network
-access (LAN or Tailscale) can see decedent names and funeral homes, so
-treat it like a real password, not a formality. Sessions last about a
-year once someone logs in on a device, so this isn't a "log in every
-time" hassle — one gate per device/browser, then it's remembered.
-`/logout` clears it on that device if you ever need to.
+Every page and every API call requires logging in as a specific person —
+there's no shared passcode anymore. This is what actually credits every
+Assign/Move/Release/Cremate/Checkout/inventory action to a real person
+(the `staff` field the server records comes from the login session, not
+anything the browser sends), which is what makes the admin page's
+per-person history trustworthy.
+
+**First run:** the app seeds one account per name in `config.STAFF_NAMES`,
+all sharing the same temporary password (`config.INITIAL_TEMP_PASSWORD`,
+default `changeme123`), and makes the first name in that list an admin.
+Logging in with the temporary password immediately forces a "set your own
+password" screen — after that, nobody (not even an admin) knows it.
+`config.STAFF_NAMES` is only read on that very first boot; after accounts
+exist, staff are added/disabled from `/admin`, not by editing config.py.
+
+**Admin page (`/admin`, visible only to admins):**
+- Add a new staff account (assigns a temporary password, same as above).
+- Disable a departed staff member's login — this does NOT delete their
+  account, so their name stays intact on everything they already did.
+- Reset someone's password if they forget it (sets a new temporary one,
+  forces them to set their own again at next login) — there's no
+  self-service "forgot password" email/text, since this app has no way
+  to send either; a reset always goes through an admin.
+- View everything a specific person has done (every move, release,
+  cremation, status flag, inventory item), for verifying who did what.
+
+Sessions last about a year once someone logs in on a device, so this
+isn't a "log in every shift" hassle — one login per device, then it's
+remembered until `/logout`.
 
 ## Google Sheets intake
 

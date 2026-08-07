@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="scan-body">
+  <header class="scan-header">
+    <h1>Admin</h1>
+    <div style="text-align:center; display:flex; justify-content:center; gap:14px;">
+      <a href="/board" style="color:#5fa8e0; font-size:13px;">📋 Cooler Board</a>
+      <a href="/scan" style="color:#5fa8e0; font-size:13px;">📷 Scan Station</a>
+      <a href="/logout" style="color:#889; font-size:13px;">Log out</a>
+    </div>
+  </header>
+
+  <div class="staff-row">
+    <span>Logged in as <b>{{ username }}</b></span>
+  </div>
+
+  <div class="info-form">
+    <h3 style="margin-top:0;">Add Staff</h3>
+    <label>Name</label>
+    <input id="newUsername" type="text" placeholder="Staff member's full name" autocomplete="off">
+    <label><input id="newUserAdmin" type="checkbox" style="width:auto; margin-right:8px;">Give admin access</label>
+    <button id="addUserBtn" class="primary-btn">Add Staff</button>
+    <div id="addUserStatus" class="status-msg"></div>
+  </div>
+
+  <div class="info-form">
+    <h3 style="margin-top:0;">Staff Accounts</h3>
+    <div id="userList" class="inventory-list"></div>
+  </div>
+
+  <div id="historyOverlay" class="detail-overlay hidden">
+    <div class="detail-card">
+      <button id="closeHistory" class="close-btn">&times;</button>
+      <div class="detail-card-body">
+        <div id="historyContent"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.INITIAL_USERS = {{ users_json | safe }};
+  </script>
+  <script src="{{ url_for('static', filename='admin.js') }}"></script>
+</body>
+</html>

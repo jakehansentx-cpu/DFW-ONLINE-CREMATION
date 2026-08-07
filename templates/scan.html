@@ -17,19 +17,16 @@
     <h1>Cooler Scan Station</h1>
     <div style="text-align:center; display:flex; justify-content:center; gap:14px;">
       <a href="/board" style="color:#5fa8e0; font-size:13px;">📋 Cooler Board</a>
+      {% if is_admin %}<a href="/admin" style="color:#5fa8e0; font-size:13px;">⚙️ Admin</a>{% endif %}
       <a href="/logout" style="color:#889; font-size:13px;">Log out</a>
     </div>
   </header>
 
   <div class="staff-row">
-    <label for="staffSelect">Who's working?</label>
-    <select id="staffSelect">
-      <option value="">-- Select your name --</option>
-      {% for name in staff_names %}
-      <option value="{{ name }}">{{ name }}</option>
-      {% endfor %}
-    </select>
+    <span>Logged in as <b>{{ username }}</b></span>
+    <a href="/change-password" style="color:#889; font-size:13px; margin-left:auto;">Change Password</a>
   </div>
+  <script>window.CURRENT_STAFF_NAME = {{ username | tojson }};</script>
 
   <div class="mode-bar">
     <button class="mode-btn active" data-mode="sheet-intake">Decedent Information</button>

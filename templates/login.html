@@ -12,8 +12,11 @@
   </header>
   <div class="scan-panel">
     <form method="POST">
-      <div class="step-label">Enter the access passcode</div>
-      <input type="password" name="passcode" class="scan-input" autofocus autocomplete="current-password">
+      <div class="step-label">Log in</div>
+      <label style="display:block; text-align:left; color:#aab; font-size:14px; margin-top:10px;">Name</label>
+      <input type="text" name="username" class="scan-input" autofocus autocomplete="username">
+      <label style="display:block; text-align:left; color:#aab; font-size:14px; margin-top:10px;">Password</label>
+      <input type="password" name="password" class="scan-input" autocomplete="current-password">
       {% if error %}<div class="status-msg err">{{ error }}</div>{% endif %}
       <button type="submit" class="primary-btn" style="margin-top:14px;">Continue</button>
     </form>
