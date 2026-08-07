@@ -421,6 +421,9 @@ function showDetail(loc, coolerName, shelfNum) {
           <button class="move-here-btn" data-case="${escapeHtml(o.case_code)}">📍 Move to New Location</button>
           <button class="move-staging-btn" data-case="${escapeHtml(o.case_code)}">🔥 Move to Cremation Staging</button>
         </div>
+        ${currentScreen === "Cremation Staging" ? `
+        <a class="secondary-btn" href="/case/${encodeURIComponent(o.case_code)}/print-cremation-sticker" target="_blank" rel="noopener" style="display:block; text-decoration:none; text-align:center; margin-top:8px;">🖨️ Print Cremation Sticker</a>
+        ` : ""}
         <div class="release-actions" data-case="${escapeHtml(o.case_code)}">
           <button class="release-btn" data-case="${escapeHtml(o.case_code)}">📤 Release</button>
           <button class="checkout-btn" data-case="${escapeHtml(o.case_code)}">📦 Check Out</button>

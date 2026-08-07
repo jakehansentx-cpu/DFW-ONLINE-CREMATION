@@ -1217,6 +1217,26 @@ def case_print_label_page(case_code):
     )
 
 
+@app.route("/case/<case_code>/print-cremation-sticker")
+@login_required
+def case_print_cremation_page(case_code):
+    """Printable sticker for the cremation container itself -- sized for
+    Avery 5146 name badge sheets. Same QR/case link as the armband tag,
+    so scanning either one at Cremate time works identically; only
+    offered on the board when the decedent's current shelf is in the
+    Cremation Staging screen (see board.js)."""
+    db = get_db()
+    row = get_case_with_location(db, case_code)
+    if row is None:
+        return jsonify(error="Unknown case code -- start intake first"), 404
+    return render_template(
+        "case_print_cremation.html",
+        case=row,
+        case_code=case_code,
+        pickup_date=format_date_for_sheet(row["pickup_date"]),
+    )
+
+
 @app.route("/case/<case_code>/release-form")
 @login_required
 def case_release_form_page(case_code):
