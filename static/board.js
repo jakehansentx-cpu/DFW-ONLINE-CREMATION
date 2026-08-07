@@ -425,13 +425,22 @@ function showDetail(loc, coolerName, shelfNum) {
         <input type="date" class="edit-date" data-case="${escapeHtml(o.case_code)}" value="${escapeHtml(o.pickup_date || "")}">
         <button class="save-occupant-btn" data-case="${escapeHtml(o.case_code)}" data-index="${i}">Save</button>
         <div class="save-status" data-index="${i}"></div>
-        <div class="move-actions">
-          <button class="move-here-btn" data-case="${escapeHtml(o.case_code)}">📍 Move to New Location</button>
-          <button class="move-staging-btn" data-case="${escapeHtml(o.case_code)}">🔥 Move to Cremation Staging</button>
-        </div>
         ${currentScreen === "Cremation Staging" ? `
         <a class="secondary-btn" href="/case/${encodeURIComponent(o.case_code)}/print-cremation-sticker" target="_blank" rel="noopener" style="display:block; text-decoration:none; text-align:center; margin-top:8px;">🖨️ Print Cremation Tag (Office Printer)</a>
+        <div class="cremate-actions" data-case="${escapeHtml(o.case_code)}">
+          <button class="cremate-btn" data-case="${escapeHtml(o.case_code)}" style="margin-top:8px; background:#5c2a2a; color:#fff;">🔥 Cremate</button>
+        </div>
+        <div class="cremate-form-inline hidden" data-case="${escapeHtml(o.case_code)}">
+          <label>Disk Number</label>
+          <input type="text" class="disk-number-input" data-case="${escapeHtml(o.case_code)}" placeholder="Cremation disk number" inputmode="numeric">
+          <button class="confirm-cremate-btn primary-btn" data-case="${escapeHtml(o.case_code)}" style="background:#5c2a2a;">Confirm Cremation</button>
+          <button class="cancel-cremate-btn secondary-btn" data-case="${escapeHtml(o.case_code)}">Cancel</button>
+        </div>
         ` : ""}
+        <div class="move-actions">
+          <button class="move-here-btn" data-case="${escapeHtml(o.case_code)}">📍 Move to New Location</button>
+          ${currentScreen === "Cremation Staging" ? "" : `<button class="move-staging-btn" data-case="${escapeHtml(o.case_code)}">🔥 Move to Cremation Staging</button>`}
+        </div>
         <div class="release-actions" data-case="${escapeHtml(o.case_code)}">
           <button class="release-btn" data-case="${escapeHtml(o.case_code)}">📤 Release</button>
           <button class="checkout-btn" data-case="${escapeHtml(o.case_code)}">📦 Check Out</button>
@@ -537,6 +546,55 @@ function showDetail(loc, coolerName, shelfNum) {
         } finally {
           btn.disabled = false;
         }
+      });
+    });
+
+    content.querySelectorAll(".cremate-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const caseCode = btn.dataset.case;
+        content.querySelector(`.cremate-actions[data-case="${CSS.escape(caseCode)}"]`).classList.add("hidden");
+        content.querySelector(`.cremate-form-inline[data-case="${CSS.escape(caseCode)}"]`).classList.remove("hidden");
+      });
+    });
+
+    content.querySelectorAll(".cancel-cremate-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const caseCode = btn.dataset.case;
+        content.querySelector(`.cremate-form-inline[data-case="${CSS.escape(caseCode)}"]`).classList.add("hidden");
+        content.querySelector(`.cremate-actions[data-case="${CSS.escape(caseCode)}"]`).classList.remove("hidden");
+      });
+    });
+
+    content.querySelectorAll(".confirm-cremate-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const caseCode = btn.dataset.case;
+        const name = occupantNameFor(caseCode, loc);
+        const diskNumber = content.querySelector(`.disk-number-input[data-case="${CSS.escape(caseCode)}"]`).value.trim();
+        askBoardConfirm(
+          `Mark ${name} as CREMATED (Final Disposition)? This deactivates the tag and can't be undone.`,
+          async () => {
+            try {
+              const res = await fetch("/api/release", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  case_code: caseCode,
+                  cremated: true,
+                  staff: getStaffName(),
+                  disk_number: diskNumber,
+                }),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error || "Cremation failed");
+              overlay.classList.add("hidden");
+              const warning = data.sheet_warning ? ` (${data.sheet_warning})` : "";
+              showMoveStatus(`${name} marked as cremated.${warning}`, !data.sheet_warning);
+              poll();
+            } catch (err) {
+              showMoveStatus(err.message, false);
+            }
+          }
+        );
       });
     });
 
