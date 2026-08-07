@@ -2012,6 +2012,56 @@ def api_sheet_intake_save():
     return jsonify(ok=True, case=dict(row))
 
 
+@app.route("/api/sheet-intake/link-tag", methods=["POST"])
+@login_required
+def api_sheet_intake_link_tag():
+    """
+    Links a pre-printed blank field tag (see gen_field_tags.py) to the
+    case just created via Sheets intake, for staff who hand-write the
+    decedent's info onto a physical tag instead of printing a new one.
+
+    This is deliberately NOT the same path as _resolve_field_tag/
+    /api/case/lookup: that flow claims whatever the NEXT unclaimed sheet
+    row happens to be for a freshly-scanned placeholder, which would
+    hand out a different case number than the one already created and
+    filled in here. This just records that a specific already-known
+    case_code IS the real identity behind a specific scanned placeholder.
+    """
+    data = request.get_json(force=True)
+    case_code = (data.get("case_code") or "").strip()
+    placeholder_code = (data.get("placeholder_code") or "").strip()
+
+    if not case_code or not placeholder_code:
+        return jsonify(error="Missing case_code or placeholder_code"), 400
+    if not placeholder_code.startswith(config.FIELD_TAG_PREFIX):
+        return jsonify(error=f"That's not a blank field tag (expected a {config.FIELD_TAG_PREFIX}... code)"), 400
+
+    db = get_db()
+    case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
+    if case is None:
+        return jsonify(error="Unknown case code -- start intake first"), 404
+
+    existing_alias = db.execute(
+        "SELECT real_case_code FROM tag_aliases WHERE placeholder_code = ?", (placeholder_code,)
+    ).fetchone()
+    if existing_alias and existing_alias["real_case_code"] != case_code:
+        return jsonify(error=f"That tag is already linked to case {existing_alias['real_case_code']}"), 409
+    already_used_directly = db.execute(
+        "SELECT 1 FROM cases WHERE case_code = ?", (placeholder_code,)
+    ).fetchone()
+    if already_used_directly is not None:
+        return jsonify(error=f"{placeholder_code} is itself an active case, not a blank tag"), 409
+
+    if not existing_alias:
+        db.execute(
+            "INSERT INTO tag_aliases (placeholder_code, real_case_code, created_at) VALUES (?, ?, ?)",
+            (placeholder_code, case_code, now()),
+        )
+        db.commit()
+
+    return jsonify(ok=True, case_code=case_code, placeholder_code=placeholder_code)
+
+
 @app.route("/api/case/<case_code>")
 @login_required
 def api_case_get(case_code):

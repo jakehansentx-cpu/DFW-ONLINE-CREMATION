@@ -378,6 +378,40 @@ function advancePastPrintGate() {
 printGateBtn.addEventListener("click", advancePastPrintGate);
 printLabelGateBtn.addEventListener("click", advancePastPrintGate);
 
+// Decedent Information (sheet-intake) alternative to the print gate --
+// for staff who hand-write the decedent's info onto a pre-printed blank
+// field tag instead of printing a new one. Scanning that tag here links
+// it (via /api/sheet-intake/link-tag) to the case just created, so later
+// scans of the same physical tag resolve to this case instead of
+// claiming a different, unrelated one.
+function showTagLinkStep(code, nameTag) {
+  infoForm.classList.add("hidden");
+  startSheetCaseBtn.classList.add("hidden");
+  step = "link-tag";
+  cameraBtn.classList.remove("hidden");
+  stepLabel.textContent = `Scan the tag you wrote ${code}${nameTag}'s info on`;
+  showStatus("Saved. Scan the physical tag to link it.", true);
+}
+
+async function handleTagLinkScan(rawCode) {
+  const placeholderCode = normalizeCaseCode(rawCode);
+  if (!placeholderCode) {
+    showStatus("That doesn't look like a tag QR code.", false);
+    return;
+  }
+  try {
+    await postJSON("/api/sheet-intake/link-tag", {
+      case_code: currentCaseCode,
+      placeholder_code: placeholderCode,
+    });
+    step = "location";
+    stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}${nameSuffix(currentCaseName)}`;
+    showStatus("Tag linked. Scan a slot location.", true);
+  } catch (err) {
+    showStatus(err.message, false);
+  }
+}
+
 function clearInfoForm() {
   document.getElementById("fName").value = "";
   document.getElementById("fHome").value = "";
@@ -451,6 +485,8 @@ async function processScannedCode(code) {
       await handleCaseScan(code);
     } else if (step === "location") {
       await handleLocationScan(code);
+    } else if (step === "link-tag") {
+      await handleTagLinkScan(code);
     }
   } catch (err) {
     showStatus(err.message, false);
@@ -638,8 +674,8 @@ saveInfoBtn.addEventListener("click", async () => {
       const result = await postJSON("/api/sheet-intake/save", body, 25000);
       currentCaseName = body.name || null;
       const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
-      showPrintGate(currentCaseCode, nameSuffix(currentCaseName));
-      if (warning) showStatus(`Saved${warning}. Print the armband tag to continue.`, false);
+      showTagLinkStep(currentCaseCode, nameSuffix(currentCaseName));
+      if (warning) showStatus(`Saved${warning}. Scan the physical tag to link it.`, false);
     } catch (err) {
       showStatus(err.message, false);
     }
