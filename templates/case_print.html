@@ -37,31 +37,19 @@
     border-left: 1px solid #e4e1d9;
     padding-left: 0.14in;
   }
-  #label .line-name {
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-weight: 700;
-    font-size: 15pt;
-    line-height: 1.15;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  #label .line-home {
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-weight: 500;
-    font-size: 10pt;
-    line-height: 1.2;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
+  #label .line-name,
+  #label .line-home,
   #label .line-date {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-weight: 400;
-    font-size: 9pt;
-    line-height: 1.2;
-    color: #4a4d54;
+    font-weight: 700;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
+  #label .line-name { font-size: 15pt; line-height: 1.15; }
+  #label .line-home { font-size: 10pt; line-height: 1.2; }
+  #label .line-date { font-size: 9pt; line-height: 1.2; color: #4a4d54; }
 
   @media print {
     body * { visibility: hidden; }
@@ -87,5 +75,24 @@
       <div class="line-date">{{ pickup_date or "" }}</div>
     </div>
   </div>
+
+  <script>
+    // Shrinks each line's font size (down to a readable floor) until it
+    // fits on one line, instead of ellipsis-truncating a long name/
+    // funeral home -- runs before print so the fitted size is what
+    // actually prints.
+    function autoFitLine(el, minFontSize) {
+      let fontSize = parseFloat(getComputedStyle(el).fontSize);
+      while (el.scrollWidth > el.clientWidth && fontSize > minFontSize) {
+        fontSize -= 0.5;
+        el.style.fontSize = fontSize + "pt";
+      }
+    }
+    window.addEventListener("load", () => {
+      autoFitLine(document.querySelector("#label .line-name"), 8);
+      autoFitLine(document.querySelector("#label .line-home"), 6);
+      autoFitLine(document.querySelector("#label .line-date"), 6);
+    });
+  </script>
 </body>
 </html>
