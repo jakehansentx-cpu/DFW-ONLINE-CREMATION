@@ -309,22 +309,63 @@ def backfill_case_link(sheet_id, row_num, case_url):
     ).execute()
 
 
-def _tab_grid_id(sheet_id):
+def _tab_properties(sheet_id):
     """Resolves config.GOOGLE_SHEET_TAB (or the first/only tab, if unset)
-    to its numeric grid sheetId -- cell-formatting requests (unlike the
-    values API used everywhere else in this file) address a sheet by
-    that ID rather than by tab name."""
+    to its full properties dict -- cell-formatting and grid-resize
+    requests (unlike the values API used everywhere else in this file)
+    address a sheet by numeric sheetId rather than by tab name, and need
+    to know its current grid size too."""
     service = _get_service()
     meta = service.spreadsheets().get(
-        spreadsheetId=sheet_id, fields="sheets.properties(sheetId,title)"
+        spreadsheetId=sheet_id, fields="sheets.properties(sheetId,title,gridProperties)"
     ).execute()
     sheets = meta.get("sheets", [])
     tab = config.GOOGLE_SHEET_TAB
     if tab:
         for s in sheets:
             if s["properties"]["title"] == tab:
-                return s["properties"]["sheetId"]
-    return sheets[0]["properties"]["sheetId"]
+                return s["properties"]
+    return sheets[0]["properties"]
+
+
+def _tab_grid_id(sheet_id):
+    """Just the numeric sheetId -- see _tab_properties()."""
+    return _tab_properties(sheet_id)["sheetId"]
+
+
+# Sheets rejects writes past a tab's current grid boundary outright
+# (HttpError 400 "exceeds grid limits") rather than auto-expanding it --
+# some monthly sheets get created narrower than this file's column
+# layout eventually needs (see module docstring), so anything writing
+# past column O should widen the grid first. Checked once per sheet per
+# process lifetime rather than before every single write.
+_grid_width_confirmed = set()
+
+
+def _ensure_grid_width(sheet_id, needed_columns):
+    if sheet_id in _grid_width_confirmed:
+        return
+    service = _get_service()
+    props = _tab_properties(sheet_id)
+    current_width = props.get("gridProperties", {}).get("columnCount", 0)
+    if current_width < needed_columns:
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=sheet_id,
+            body={
+                "requests": [
+                    {
+                        "updateSheetProperties": {
+                            "properties": {
+                                "sheetId": props["sheetId"],
+                                "gridProperties": {"columnCount": needed_columns},
+                            },
+                            "fields": "gridProperties.columnCount",
+                        }
+                    }
+                ]
+            },
+        ).execute()
+    _grid_width_confirmed.add(sheet_id)
 
 
 def set_case_link_dead(sheet_id, row_num):
@@ -375,6 +416,7 @@ def backfill_has_inventory(sheet_id, row_num, case_url):
     """Writes a "Yes" into column Q, linked straight to the case page's
     Inventory section, the first time an inventory item (photo and/or
     description) gets logged for a case."""
+    _ensure_grid_width(sheet_id, 20)
     service = _get_service()
     formula = f'=HYPERLINK("{case_url}", "Yes")'
     service.spreadsheets().values().update(
@@ -424,6 +466,7 @@ def backfill_checkout(sheet_id, row_num, summary):
     """Writes the current checkout status into column P -- an empty
     string clears it back to blank once the decedent is checked back
     in."""
+    _ensure_grid_width(sheet_id, 20)
     service = _get_service()
     service.spreadsheets().values().update(
         spreadsheetId=sheet_id,
