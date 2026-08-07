@@ -56,7 +56,8 @@
         <div style="padding:8px 0; font-size:18px;">{{ loc_text or "Not yet placed" }}</div>
       </div>
       <div class="reset-row">
-        <a class="secondary-btn" href="{{ url_for('case_print_page', case_code=case_code) }}" style="text-decoration:none; display:inline-block;">Print Tag</a>
+        <a class="secondary-btn" href="{{ url_for('case_print_page', case_code=case_code) }}" style="text-decoration:none; display:inline-block;">🖨️ Print Tag (Office Printer)</a>
+        <a class="secondary-btn" href="{{ url_for('case_print_label_page', case_code=case_code) }}" style="text-decoration:none; display:inline-block; margin-left:8px;">🏷️ Print to Label Printer</a>
       </div>
     {% endif %}
 

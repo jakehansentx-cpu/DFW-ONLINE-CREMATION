@@ -9,8 +9,10 @@ const saveInfoBtn = document.getElementById("saveInfoBtn");
 const pendingBadge = document.getElementById("pendingBadge");
 const startSheetCaseBtn = document.getElementById("startSheetCaseBtn");
 const printTagLink = document.getElementById("printTagLink");
+const printLabelLink = document.getElementById("printLabelLink");
 const printGate = document.getElementById("printGate");
 const printGateBtn = document.getElementById("printGateBtn");
+const printLabelGateBtn = document.getElementById("printLabelGateBtn");
 const releaseForm = document.getElementById("releaseForm");
 const releaseFormTitle = document.getElementById("releaseFormTitle");
 const releasedTo = document.getElementById("releasedTo");
@@ -152,9 +154,12 @@ syncSheetBtn.addEventListener("click", async () => {
       const rows = result.synced
         .map(
           (c) => `
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid #263042;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid #263042; flex-wrap:wrap;">
           <span>${escapeHtmlLocal(c.case_code)}${c.name ? " — " + escapeHtmlLocal(c.name) : ""}</span>
-          <a href="/case/${encodeURIComponent(c.case_code)}/print" target="_blank" rel="noopener" style="color:#5fa8e0; white-space:nowrap;">🖨️ Print Tag</a>
+          <span style="white-space:nowrap;">
+            <a href="/case/${encodeURIComponent(c.case_code)}/print" target="_blank" rel="noopener" style="color:#5fa8e0;">🖨️ Office</a>
+            <a href="/case/${encodeURIComponent(c.case_code)}/print-label" target="_blank" rel="noopener" style="color:#5fa8e0; margin-left:10px;">🏷️ Label Printer</a>
+          </span>
         </div>`
         )
         .join("");
@@ -296,6 +301,7 @@ function resetFlow() {
   checkoutForm.classList.add("hidden");
   checkinForm.classList.add("hidden");
   printTagLink.classList.add("hidden");
+  printLabelLink.classList.add("hidden");
   printGate.classList.add("hidden");
   releaseReceiptGate.classList.add("hidden");
   inventoryPanel.classList.add("hidden");
@@ -343,17 +349,22 @@ function showPrintGate(code, nameTag) {
   infoForm.classList.add("hidden");
   printGate.classList.remove("hidden");
   printGateBtn.href = `/case/${encodeURIComponent(code)}/print`;
+  printLabelGateBtn.href = `/case/${encodeURIComponent(code)}/print-label`;
   stepLabel.textContent = `Print the armband tag for ${code}${nameTag}`;
   showStatus("Saved. Print the armband tag to continue.", true);
 }
 
-printGateBtn.addEventListener("click", () => {
+// Either printer works to satisfy the "print before placing" gate --
+// whichever one staff actually have on hand.
+function advancePastPrintGate() {
   printGate.classList.add("hidden");
   startSheetCaseBtn.classList.add("hidden");
   step = "location";
   stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}${nameSuffix(currentCaseName)}`;
   showStatus("Scan a slot location.", true);
-});
+}
+printGateBtn.addEventListener("click", advancePastPrintGate);
+printLabelGateBtn.addEventListener("click", advancePastPrintGate);
 
 function clearInfoForm() {
   document.getElementById("fName").value = "";
@@ -377,6 +388,8 @@ startSheetCaseBtn.addEventListener("click", async () => {
     saveInfoBtn.textContent = "Save (writes to sheet + this app)";
     printTagLink.href = `/case/${encodeURIComponent(currentCaseCode)}/print`;
     printTagLink.classList.remove("hidden");
+    printLabelLink.href = `/case/${encodeURIComponent(currentCaseCode)}/print-label`;
+    printLabelLink.classList.remove("hidden");
     showStatus(`Pulled ${currentCaseCode} from the sheet. Fill in details.`, true);
   } catch (err) {
     showStatus(err.message, false);
