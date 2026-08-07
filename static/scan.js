@@ -45,8 +45,18 @@ const inventoryPanel = document.getElementById("inventoryPanel");
 const inventoryTitle = document.getElementById("inventoryTitle");
 const inventoryList = document.getElementById("inventoryList");
 const inventoryDescription = document.getElementById("inventoryDescription");
-const inventoryPhotoInput = document.getElementById("inventoryPhotoInput");
-const inventoryPhotoPreview = document.getElementById("inventoryPhotoPreview");
+const inventoryCameraBtn = document.getElementById("inventoryCameraBtn");
+const inventoryCameraPanel = document.getElementById("inventoryCameraPanel");
+const inventoryCameraVideo = document.getElementById("inventoryCameraVideo");
+const inventoryCameraCanvas = document.getElementById("inventoryCameraCanvas");
+const inventoryCameraStopBtn = document.getElementById("inventoryCameraStopBtn");
+const inventoryPendingList = document.getElementById("inventoryPendingList");
+let inventoryCameraStream = null;
+// Photos taken this session but not saved yet -- { blob, url, capturedAt }.
+// Stays open for multiple shots in a row instead of closing after each
+// one, and each entry remembers the real moment it was taken (not when
+// the batch eventually gets uploaded).
+let pendingCaptures = [];
 const addInventoryBtn = document.getElementById("addInventoryBtn");
 const inventoryStatus = document.getElementById("inventoryStatus");
 
@@ -310,8 +320,9 @@ function resetFlow() {
   printedName.value = "";
   diskNumber.value = "";
   inventoryDescription.value = "";
-  inventoryPhotoInput.value = "";
-  inventoryPhotoPreview.classList.add("hidden");
+  stopInventoryCamera();
+  clearPendingCaptures();
+  addInventoryBtn.textContent = "Add Item";
   inventoryStatus.textContent = "";
   inventoryStatus.className = "status-msg";
   clearSignature();
@@ -788,48 +799,162 @@ async function loadInventory(code) {
   }
 }
 
-inventoryPhotoInput.addEventListener("change", () => {
-  const file = inventoryPhotoInput.files[0];
-  if (!file) {
-    inventoryPhotoPreview.classList.add("hidden");
+// Inventory photo capture -- a live camera preview the user taps
+// anywhere on to snap a photo, instead of handing off to the OS's own
+// separate camera app via a plain file input. Stays open across
+// multiple shots in a row (take one photo per item without re-opening
+// the camera each time) instead of closing after every single photo.
+// Its own stream/video/canvas, kept independent of the main Case ID
+// scan camera above, so this can never interfere with that flow's state.
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+// Matches the "%Y-%m-%d %H:%M:%S" format used everywhere else in the
+// app/database -- sent to the server as when each photo was ACTUALLY
+// taken, not whenever the batch eventually finishes uploading.
+function formatTimestampForServer(date) {
+  return (
+    `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ` +
+    `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`
+  );
+}
+
+async function startInventoryCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    inventoryStatus.textContent = "Camera not available on this device/browser.";
+    inventoryStatus.className = "status-msg err";
     return;
   }
-  inventoryPhotoPreview.src = URL.createObjectURL(file);
-  inventoryPhotoPreview.classList.remove("hidden");
-});
+  try {
+    inventoryCameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+    });
+  } catch (err) {
+    inventoryStatus.textContent = "Camera permission denied or unavailable: " + err.message;
+    inventoryStatus.className = "status-msg err";
+    return;
+  }
+  inventoryCameraVideo.srcObject = inventoryCameraStream;
+  inventoryCameraVideo.muted = true;
+  await inventoryCameraVideo.play();
+  inventoryCameraPanel.classList.remove("hidden");
+  inventoryCameraBtn.classList.add("hidden");
+}
+
+function stopInventoryCamera() {
+  if (inventoryCameraStream) {
+    inventoryCameraStream.getTracks().forEach((t) => t.stop());
+    inventoryCameraStream = null;
+  }
+  inventoryCameraPanel.classList.add("hidden");
+  inventoryCameraBtn.classList.remove("hidden");
+}
+
+function captureInventoryPhoto() {
+  if (!inventoryCameraStream) return;
+  const ctx = inventoryCameraCanvas.getContext("2d");
+  inventoryCameraCanvas.width = inventoryCameraVideo.videoWidth;
+  inventoryCameraCanvas.height = inventoryCameraVideo.videoHeight;
+  ctx.drawImage(inventoryCameraVideo, 0, 0, inventoryCameraCanvas.width, inventoryCameraCanvas.height);
+  inventoryCameraCanvas.toBlob(
+    (blob) => {
+      pendingCaptures.push({ blob, url: URL.createObjectURL(blob), capturedAt: new Date() });
+      renderPendingCaptures();
+      // Camera stays open on purpose -- ready for the next shot right away.
+    },
+    "image/jpeg",
+    0.85
+  );
+}
+
+function renderPendingCaptures() {
+  if (pendingCaptures.length === 0) {
+    inventoryPendingList.classList.add("hidden");
+    inventoryPendingList.innerHTML = "";
+  } else {
+    inventoryPendingList.classList.remove("hidden");
+    inventoryPendingList.innerHTML = pendingCaptures
+      .map(
+        (c, i) => `
+      <div class="inventory-pending-item">
+        <img src="${c.url}" alt="Captured item photo">
+        <div class="pending-time">${c.capturedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+        <button type="button" class="pending-remove-btn" data-index="${i}">✕</button>
+      </div>`
+      )
+      .join("");
+    inventoryPendingList.querySelectorAll(".pending-remove-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const i = parseInt(btn.dataset.index, 10);
+        URL.revokeObjectURL(pendingCaptures[i].url);
+        pendingCaptures.splice(i, 1);
+        renderPendingCaptures();
+      });
+    });
+  }
+  addInventoryBtn.textContent = pendingCaptures.length > 1 ? `Add ${pendingCaptures.length} Items` : "Add Item";
+}
+
+function clearPendingCaptures() {
+  stopInventoryCamera();
+  pendingCaptures.forEach((c) => URL.revokeObjectURL(c.url));
+  pendingCaptures = [];
+  renderPendingCaptures();
+}
+
+inventoryCameraBtn.addEventListener("click", startInventoryCamera);
+inventoryCameraStopBtn.addEventListener("click", stopInventoryCamera);
+inventoryCameraVideo.addEventListener("click", captureInventoryPhoto);
 
 addInventoryBtn.addEventListener("click", async () => {
   if (!currentCaseCode) return;
   const description = inventoryDescription.value.trim();
-  const photo = inventoryPhotoInput.files[0];
-  if (!description && !photo) {
-    inventoryStatus.textContent = "Enter a description or attach a photo.";
+  if (!description && pendingCaptures.length === 0) {
+    inventoryStatus.textContent = "Enter a description or take a photo.";
     inventoryStatus.className = "status-msg err";
     return;
   }
 
-  const body = new FormData();
-  body.append("description", description);
-  body.append("staff", getStaffName());
-  if (photo) body.append("photo", photo);
-
   addInventoryBtn.disabled = true;
-  inventoryStatus.textContent = "Saving...";
-  inventoryStatus.className = "status-msg";
+  // A description with no photos at all is still just one line item;
+  // otherwise save one line item per captured photo, each with its own
+  // real capture time, applying the same typed description (if any) to
+  // each -- staff can always edit an individual line's wording later if
+  // a batch covered several different items.
+  const toSave = pendingCaptures.length > 0 ? pendingCaptures : [null];
+  let lastItems = null;
   try {
-    const res = await fetch(`/api/case/${encodeURIComponent(currentCaseCode)}/inventory`, {
-      method: "POST",
-      body,
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Couldn't save item");
-    renderInventoryList(data.items);
+    for (let i = 0; i < toSave.length; i++) {
+      const capture = toSave[i];
+      if (toSave.length > 1) {
+        inventoryStatus.textContent = `Saving ${i + 1} of ${toSave.length}...`;
+        inventoryStatus.className = "status-msg";
+      } else {
+        inventoryStatus.textContent = "Saving...";
+        inventoryStatus.className = "status-msg";
+      }
+      const body = new FormData();
+      body.append("description", description);
+      body.append("staff", getStaffName());
+      if (capture) {
+        body.append("photo", capture.blob, "inventory.jpg");
+        body.append("captured_at", formatTimestampForServer(capture.capturedAt));
+      }
+      const res = await fetch(`/api/case/${encodeURIComponent(currentCaseCode)}/inventory`, {
+        method: "POST",
+        body,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Couldn't save item");
+      lastItems = data.items;
+    }
+    renderInventoryList(lastItems);
     inventoryDescription.value = "";
-    inventoryPhotoInput.value = "";
-    inventoryPhotoPreview.classList.add("hidden");
-    inventoryStatus.textContent = "Item added.";
+    clearPendingCaptures();
+    inventoryStatus.textContent = toSave.length > 1 ? `${toSave.length} items added.` : "Item added.";
     inventoryStatus.className = "status-msg ok";
   } catch (err) {
+    if (lastItems) renderInventoryList(lastItems);
     inventoryStatus.textContent = err.message;
     inventoryStatus.className = "status-msg err";
   } finally {

@@ -142,11 +142,17 @@
   <div id="inventoryPanel" class="info-form hidden">
     <h3 id="inventoryTitle">Inventory</h3>
     <div id="inventoryList" class="inventory-list"></div>
-    <label style="margin-top:16px;">Item Description</label>
+    <label style="margin-top:16px;">Item Description (optional)</label>
     <input id="inventoryDescription" type="text" placeholder="e.g. Gold ring, cell phone, wallet with paperwork">
-    <label>Photo (optional)</label>
-    <input id="inventoryPhotoInput" type="file" accept="image/*" capture="environment">
-    <img id="inventoryPhotoPreview" class="inventory-photo-preview hidden" alt="Preview">
+    <label>Photos</label>
+    <button id="inventoryCameraBtn" type="button" class="icon-camera-btn">📷</button>
+    <div id="inventoryCameraPanel" class="camera-panel hidden">
+      <video id="inventoryCameraVideo" playsinline muted autoplay></video>
+      <p class="camera-tap-hint">Tap the picture to take a photo -- take as many as you need, then tap Done</p>
+      <canvas id="inventoryCameraCanvas" class="hidden"></canvas>
+      <button id="inventoryCameraStopBtn" type="button" class="secondary-btn">Done</button>
+    </div>
+    <div id="inventoryPendingList" class="inventory-pending-list hidden"></div>
     <button id="addInventoryBtn" class="primary-btn">Add Item</button>
     <div id="inventoryStatus" class="status-msg"></div>
   </div>

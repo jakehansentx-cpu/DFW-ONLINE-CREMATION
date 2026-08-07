@@ -1112,7 +1112,14 @@ def api_add_inventory(case_code):
     """Adds one inventory line item: a description, an optional photo
     (attached as multipart form data, not JSON, since it's a file
     upload), and whoever logged it. One photo per line item -- multiple
-    angles of the same item are just multiple lines."""
+    angles of the same item are just multiple lines.
+
+    When several photos are captured back to back (see scan.js's
+    multi-capture queue) and saved together, each one is submitted as
+    its own call to this route with its own captured_at -- the exact
+    moment that particular photo was taken, not when the batch happened
+    to finish uploading -- so each item's timestamp reflects reality
+    even if there were several seconds/minutes between shots."""
     db = get_db()
     case = db.execute("SELECT id, name FROM cases WHERE case_code = ?", (case_code,)).fetchone()
     if case is None:
@@ -1121,11 +1128,18 @@ def api_add_inventory(case_code):
     description = (request.form.get("description") or "").strip()
     staff = (request.form.get("staff") or "").strip()
     photo = request.files.get("photo")
+    captured_at = (request.form.get("captured_at") or "").strip()
 
     if not description and not (photo and photo.filename):
         return jsonify(error="Enter a description or attach a photo"), 400
 
     timestamp = now()
+    if captured_at:
+        try:
+            datetime.strptime(captured_at, "%Y-%m-%d %H:%M:%S")
+            timestamp = captured_at
+        except ValueError:
+            pass  # malformed -- fall back to server time rather than reject the item
     photo_filename = None
     if photo and photo.filename:
         photo_filename, err = _save_inventory_photo(photo, case_code, case["name"], timestamp)
