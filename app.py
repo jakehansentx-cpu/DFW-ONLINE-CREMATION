@@ -1271,6 +1271,21 @@ def case_release_form_page(case_code):
     )
 
 
+@app.route("/location/<location_code>/qr.png")
+@login_required
+def location_qr_image(location_code):
+    """QR image for a shelf/slot location itself -- encodes the raw
+    location code text (not a URL), matching what a printed physical
+    location tag encodes (see gen_location_qr.py). Scanning it off the
+    board's own screen at the scan station's Assign/Move step works
+    exactly the same as scanning a physical location tag, for whenever
+    that's easier than reaching the actual sticker."""
+    png_bytes = generate_qr_png(location_code)
+    resp = app.response_class(png_bytes, mimetype="image/png")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
 @app.route("/case/<case_code>/qr.png")
 @login_required
 def case_qr_image(case_code):

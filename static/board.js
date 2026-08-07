@@ -399,7 +399,15 @@ function showDetail(loc, coolerName, shelfNum) {
   const where = `${coolerName} — Shelf ${shelfNum}${loc.slot ? loc.slot : ""}`;
 
   if (loc.occupants.length === 0) {
-    content.innerHTML = `<h2>${escapeHtml(where)}</h2><p>Empty</p>`;
+    content.innerHTML = `
+      <h2>${escapeHtml(where)}</h2>
+      <p>Empty</p>
+      <div class="case-qr-row">
+        <img class="case-qr-thumb" src="/location/${encodeURIComponent(loc.location_code)}/qr.png" alt="QR code for ${escapeHtml(where)}">
+        <p class="case-line">${escapeHtml(loc.location_code)}</p>
+      </div>
+      <p style="color:#aab; font-size:13px; text-align:center; margin-top:8px;">Scan this at the scan station to place a decedent here -- handy if the physical shelf tag isn't reachable.</p>
+    `;
   } else {
     const blocks = loc.occupants
       .map(
@@ -715,7 +723,10 @@ function renderHistoryBlock(caseCode, name, data) {
   return `
     <div class="occupant-block" data-history-case="${escapeHtml(caseCode)}">
       <h3 style="margin-top:0;">${escapeHtml(name || caseCode)}</h3>
-      <p class="case-line"><b>Case:</b> ${escapeHtml(caseCode)}</p>
+      <div class="case-qr-row">
+        <p class="case-line"><b>Case:</b> ${escapeHtml(caseCode)}</p>
+        <img class="case-qr-thumb" src="/case/${encodeURIComponent(caseCode)}/qr.png" alt="QR code for ${escapeHtml(caseCode)}">
+      </div>
       <div class="history-flags">${flagRows}</div>
       <h3>History</h3>
       <div class="history-list">${historyRows}</div>
