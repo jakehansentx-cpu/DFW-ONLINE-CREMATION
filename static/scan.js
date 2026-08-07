@@ -923,6 +923,7 @@ addInventoryBtn.addEventListener("click", async () => {
   // a batch covered several different items.
   const toSave = pendingCaptures.length > 0 ? pendingCaptures : [null];
   let lastItems = null;
+  let lastWarning = null;
   try {
     for (let i = 0; i < toSave.length; i++) {
       const capture = toSave[i];
@@ -947,12 +948,14 @@ addInventoryBtn.addEventListener("click", async () => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Couldn't save item");
       lastItems = data.items;
+      if (data.sheet_warning) lastWarning = data.sheet_warning;
     }
     renderInventoryList(lastItems);
     inventoryDescription.value = "";
     clearPendingCaptures();
-    inventoryStatus.textContent = toSave.length > 1 ? `${toSave.length} items added.` : "Item added.";
-    inventoryStatus.className = "status-msg ok";
+    const savedMsg = toSave.length > 1 ? `${toSave.length} items added.` : "Item added.";
+    inventoryStatus.textContent = lastWarning ? `${savedMsg} (${lastWarning})` : savedMsg;
+    inventoryStatus.className = "status-msg " + (lastWarning ? "err" : "ok");
   } catch (err) {
     if (lastItems) renderInventoryList(lastItems);
     inventoryStatus.textContent = err.message;

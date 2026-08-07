@@ -1121,7 +1121,7 @@ def api_add_inventory(case_code):
     to finish uploading -- so each item's timestamp reflects reality
     even if there were several seconds/minutes between shots."""
     db = get_db()
-    case = db.execute("SELECT id, name FROM cases WHERE case_code = ?", (case_code,)).fetchone()
+    case = db.execute("SELECT id, name, sheet_id FROM cases WHERE case_code = ?", (case_code,)).fetchone()
     if case is None:
         return jsonify(error="Unknown case code"), 404
 
@@ -1153,7 +1153,26 @@ def api_add_inventory(case_code):
     )
     db.commit()
 
-    return jsonify(ok=True, items=get_inventory_items(db, case["id"]))
+    sheet_warning = None
+    if config.GOOGLE_SHEETS_ENABLED:
+        try:
+            sid = case_sheet_id(db, case)
+            sheet_row = _sheets().find_row_for_case(sid, case_code)
+            if sheet_row and not _sheets().row_has_inventory_flag(sid, sheet_row):
+                target_url = request.host_url.rstrip("/") + url_for(
+                    "case_detail_page", case_code=case_code
+                )
+                _sheets().backfill_has_inventory(sid, sheet_row, target_url)
+        except Exception as e:
+            # First inventory item already saved locally either way -- a
+            # sheet write hiccup here shouldn't block staff from
+            # continuing to log items.
+            sheet_warning = f"Saved locally, but sheet write failed: {e}"
+
+    resp = dict(ok=True, items=get_inventory_items(db, case["id"]))
+    if sheet_warning:
+        resp["sheet_warning"] = sheet_warning
+    return jsonify(**resp)
 
 
 @app.route("/api/inventory/<int:item_id>/delete", methods=["POST"])
@@ -1732,6 +1751,7 @@ def api_release():
                     _sheets().backfill_cremation(sid, sheet_row, stamp, disk_number)
                 else:
                     _sheets().backfill_released_to(sid, sheet_row, released_to)
+                _sheets().set_case_link_dead(sid, sheet_row)
         except Exception as e:
             sheet_warning = f"Released locally, but sheet write failed: {e}"
 

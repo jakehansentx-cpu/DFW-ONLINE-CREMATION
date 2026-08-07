@@ -31,6 +31,10 @@ Column layout (matches your sheet):
     P = checkout status -- filled in while a decedent is temporarily
         checked out (autopsy, organ/tissue donation, etc.), cleared
         back to blank once checked back in
+    Q = has inventory -- blank until the first inventory item (photo
+        and/or description) is logged for the case, then a "Yes" that's
+        itself a hyperlink straight to the case page's Inventory
+        section (see backfill_has_inventory())
 
 "Next available case number" = the first row, scanning top to bottom,
 where column A has a value but B, D, and E are all still empty. That's
@@ -302,6 +306,82 @@ def backfill_case_link(sheet_id, row_num, case_url):
         range=_sheet_range(f"N{row_num}"),
         valueInputOption="USER_ENTERED",
         body={"values": [[case_url]]},
+    ).execute()
+
+
+def _tab_grid_id(sheet_id):
+    """Resolves config.GOOGLE_SHEET_TAB (or the first/only tab, if unset)
+    to its numeric grid sheetId -- cell-formatting requests (unlike the
+    values API used everywhere else in this file) address a sheet by
+    that ID rather than by tab name."""
+    service = _get_service()
+    meta = service.spreadsheets().get(
+        spreadsheetId=sheet_id, fields="sheets.properties(sheetId,title)"
+    ).execute()
+    sheets = meta.get("sheets", [])
+    tab = config.GOOGLE_SHEET_TAB
+    if tab:
+        for s in sheets:
+            if s["properties"]["title"] == tab:
+                return s["properties"]["sheetId"]
+    return sheets[0]["properties"]["sheetId"]
+
+
+def set_case_link_dead(sheet_id, row_num):
+    """Turns column N's case link red once a decedent is released or
+    cremated -- a quick visual cue, from the sheet alone, that they're
+    no longer in our care, without having to click through to check."""
+    service = _get_service()
+    grid_id = _tab_grid_id(sheet_id)
+    body = {
+        "requests": [
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": grid_id,
+                        "startRowIndex": row_num - 1,
+                        "endRowIndex": row_num,
+                        "startColumnIndex": 13,  # column N
+                        "endColumnIndex": 14,
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "textFormat": {"foregroundColor": {"red": 0.71, "green": 0.11, "blue": 0.11}}
+                        }
+                    },
+                    "fields": "userEnteredFormat.textFormat.foregroundColor",
+                }
+            }
+        ]
+    }
+    service.spreadsheets().batchUpdate(spreadsheetId=sheet_id, body=body).execute()
+
+
+def row_has_inventory_flag(sheet_id, row_num):
+    """True if column Q already has anything in it for this row -- lets
+    the caller skip re-writing it on every subsequent inventory item."""
+    service = _get_service()
+    result = (
+        service.spreadsheets()
+        .values()
+        .get(spreadsheetId=sheet_id, range=_sheet_range(f"Q{row_num}"))
+        .execute()
+    )
+    values = result.get("values", [])
+    return bool(values and values[0] and str(values[0][0]).strip())
+
+
+def backfill_has_inventory(sheet_id, row_num, case_url):
+    """Writes a "Yes" into column Q, linked straight to the case page's
+    Inventory section, the first time an inventory item (photo and/or
+    description) gets logged for a case."""
+    service = _get_service()
+    formula = f'=HYPERLINK("{case_url}", "Yes")'
+    service.spreadsheets().values().update(
+        spreadsheetId=sheet_id,
+        range=_sheet_range(f"Q{row_num}"),
+        valueInputOption="USER_ENTERED",
+        body={"values": [[formula]]},
     ).execute()
 
 
