@@ -6,42 +6,53 @@
 <title>Cremation Sticker — {{ case_code }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 <style>
-  /* Avery 5146: 4" x 6" sheet, badge cut at the top half. Only one copy
-     is printed (the sheet's second badge position is left blank) -- the
-     badge box has no fixed/max height, so it sizes to its own content
-     instead of being squeezed to fit, which is what clipped the text
-     before. */
-  @page { size: 4in 6in; margin: 0; }
+  /* Avery 5164: 8.5" x 11" sheet, six 4" x 3-1/3" shipping labels in a
+     2-column x 3-row grid. Top/bottom margin 0.5" (3 rows x 3.3333"
+     exactly fills the 10" left over), side margin 0.15625" with a
+     0.1875" gap between the two columns (2 x 0.15625 + 0.1875 = the
+     0.5" left over after two 4"-wide columns). Only the first (top-left)
+     label gets content -- the other five stay blank so the rest of the
+     sheet is still usable for the next case. */
+  @page { size: 8.5in 11in; margin: 0; }
 
   .print-toolbar { text-align: center; padding: 16px; }
-  .print-toolbar p { color: #889; font-size: 13px; max-width: 320px; margin: 10px auto 0; }
+  .print-toolbar p { color: #889; font-size: 13px; max-width: 340px; margin: 10px auto 0; }
 
   #sheet {
-    width: 4in;
-    height: 6in;
+    width: 8.5in;
+    height: 11in;
     margin: 0 auto;
     background: #fff;
+    box-sizing: border-box;
+    padding: 0.5in 0.15625in;
+    display: grid;
+    grid-template-columns: repeat(2, 4in);
+    grid-template-rows: repeat(3, 3.3333in);
+    column-gap: 0.1875in;
+    row-gap: 0;
+    justify-content: center;
   }
-  .badge-half {
+  .cell {
     width: 4in;
-    height: 3in;
+    height: 3.3333in;
     box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
   }
   .badge {
-    width: 2.3125in;
+    width: 100%;
     box-sizing: border-box;
-    padding: 0.15in;
+    padding: 0.15in 0.25in;
     color: #14151a;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.09in;
+    gap: 0.08in;
   }
-  .badge .qr-box { width: 1.5in; height: 1.5in; flex-shrink: 0; }
+  .badge .qr-box { width: 1.6in; height: 1.6in; flex-shrink: 0; }
   .badge .qr-box img { width: 100%; height: 100%; display: block; }
   .badge .line-name,
   .badge .line-home,
@@ -72,11 +83,11 @@
 <body class="scan-body">
   <div class="print-toolbar">
     <button class="primary-btn" onclick="window.print()">Print Cremation Sticker</button>
-    <p>Sized for Avery 5146 name badge sheets (4" x 6"). Prints one badge in the top position; the bottom position is left blank.</p>
+    <p>Sized for Avery 5164 shipping label sheets (6 labels, 4" x 3-1/3", per 8.5" x 11" sheet). Prints in the top-left label only -- the other five are left blank.</p>
   </div>
 
   <div id="sheet">
-    <div class="badge-half">
+    <div class="cell">
       <div class="badge">
         <div class="qr-box">
           <img src="{{ url_for('case_qr_image', case_code=case_code) }}" alt="QR code for {{ case_code }}">
@@ -87,6 +98,7 @@
         {% if staged_since %}<div class="line-staged">Moved to Staging: {{ staged_since }}</div>{% endif %}
       </div>
     </div>
+    {% for _ in range(5) %}<div class="cell"></div>{% endfor %}
   </div>
 
   <script>
