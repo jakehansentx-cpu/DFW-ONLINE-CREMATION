@@ -729,6 +729,56 @@ def generate_label_image(case_code, name, funeral_home, pickup_date, target_url)
     return buf.getvalue()
 
 
+def generate_cremation_tag_image(case_code, name, funeral_home, pickup_date, staged_since, target_url):
+    """
+    Same content as the Avery 5164 cremation tag page (QR, name,
+    funeral home, pickup date, date moved to staging) composited into a
+    single flat PNG instead -- for saving straight to a phone's photo
+    gallery or a desktop file rather than going through a printer.
+    """
+    dpi = 200
+    width, height = round(4 * dpi), round(3.3333 * dpi)
+    margin_x = round(0.5 * dpi)
+
+    img = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(img)
+
+    qr_size = round(1.6 * dpi)
+    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=1)
+    qr.add_data(target_url)
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+    qr_img = qr_img.resize((qr_size, qr_size))
+    img.paste(qr_img, ((width - qr_size) // 2, round(0.25 * dpi)))
+
+    lines = [(name or case_code, True, 34, (20, 21, 26))]
+    if funeral_home:
+        lines.append((funeral_home, True, 26, (20, 21, 26)))
+    if pickup_date:
+        lines.append((f"Pickup: {pickup_date}", True, 22, (42, 44, 49)))
+    if staged_since:
+        lines.append((f"Moved to Staging: {staged_since}", True, 22, (42, 44, 49)))
+
+    y = round(0.25 * dpi) + qr_size + round(0.2 * dpi)
+    for text, bold, size, color in lines:
+        font = _load_font(bold, size)
+        bbox = draw.textbbox((0, 0), text, font=font)
+        text_w = bbox[2] - bbox[0]
+        # Shrink to fit the tag's width rather than letting a long name
+        # or funeral home spill over the edge.
+        while text_w > width - 2 * margin_x and size > 12:
+            size -= 1
+            font = _load_font(bold, size)
+            bbox = draw.textbbox((0, 0), text, font=font)
+            text_w = bbox[2] - bbox[0]
+        draw.text(((width - text_w) // 2, y), text, font=font, fill=color)
+        y += (bbox[3] - bbox[1]) + round(0.14 * dpi)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", dpi=(dpi, dpi))
+    return buf.getvalue()
+
+
 # ------------------------------------------------------------------- pages --
 @app.route("/")
 @login_required
@@ -1250,22 +1300,10 @@ def case_print_label_page(case_code):
     )
 
 
-@app.route("/case/<case_code>/print-cremation-sticker")
-@login_required
-def case_print_cremation_page(case_code):
-    """Printable sticker for the cremation container itself -- sized for
-    Avery 5146 name badge sheets. Same QR/case link as the armband tag,
-    so scanning either one at Cremate time works identically; only
-    offered on the board when the decedent's current shelf is in the
-    Cremation Staging screen (see board.js)."""
-    db = get_db()
-    row = get_case_with_location(db, case_code)
-    if row is None:
-        return jsonify(error="Unknown case code -- start intake first"), 404
-
-    # When they arrived at their CURRENT shelf -- since this tag is only
-    # offered while a decedent sits in Cremation Staging, that's the
-    # placed/moved event that brought them there.
+def _cremation_tag_data(db, row):
+    """Pickup date (falling back to created_at) and the date this case's
+    current shelf was reached -- shared by the printable page and the
+    downloadable image, since both show the same information."""
     staged_since = None
     move_row = db.execute(
         "SELECT timestamp FROM moves WHERE case_id = ? AND action IN ('placed', 'moved') "
@@ -1279,8 +1317,6 @@ def case_print_cremation_page(case_code):
         except ValueError:
             pass
 
-    # Pickup date if we have one; otherwise fall back to when the case
-    # was first created in the system, so the tag always shows a date.
     if row["pickup_date"]:
         received_date = format_date_for_sheet(row["pickup_date"])
     else:
@@ -1290,6 +1326,24 @@ def case_print_cremation_page(case_code):
         except (ValueError, TypeError):
             received_date = None
 
+    return received_date, staged_since
+
+
+@app.route("/case/<case_code>/print-cremation-sticker")
+@login_required
+def case_print_cremation_page(case_code):
+    """Printable sticker for the cremation container itself -- sized for
+    Avery 5146 name badge sheets. Same QR/case link as the armband tag,
+    so scanning either one at Cremate time works identically; only
+    offered on the board when the decedent's current shelf is in the
+    Cremation Staging screen (see board.js)."""
+    db = get_db()
+    row = get_case_with_location(db, case_code)
+    if row is None:
+        return jsonify(error="Unknown case code -- start intake first"), 404
+
+    received_date, staged_since = _cremation_tag_data(db, row)
+
     return render_template(
         "case_print_cremation.html",
         case=row,
@@ -1297,6 +1351,27 @@ def case_print_cremation_page(case_code):
         pickup_date=received_date,
         staged_since=staged_since,
     )
+
+
+@app.route("/case/<case_code>/cremation-tag-image")
+@login_required
+def case_cremation_tag_image(case_code):
+    """Same cremation tag content as a flat downloadable PNG instead of
+    a browser print page -- for saving straight to a phone's photos, or
+    to a desktop file, instead of going through a printer at all."""
+    db = get_db()
+    row = get_case_with_location(db, case_code)
+    if row is None:
+        return jsonify(error="Unknown case code -- start intake first"), 404
+
+    received_date, staged_since = _cremation_tag_data(db, row)
+    target_url = request.host_url.rstrip("/") + url_for("case_detail_page", case_code=case_code)
+    png_bytes = generate_cremation_tag_image(
+        case_code, row["name"], row["funeral_home"], received_date, staged_since, target_url
+    )
+    resp = app.response_class(png_bytes, mimetype="image/png")
+    resp.headers["Content-Disposition"] = f"attachment; filename=Cremation_Tag_{case_code}.png"
+    return resp
 
 
 @app.route("/case/<case_code>/release-form")

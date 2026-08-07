@@ -430,6 +430,7 @@ function showDetail(loc, coolerName, shelfNum) {
         <p class="case-line"><b>Funeral Home:</b> ${escapeHtml(o.funeral_home || "—")}</p>
         <p class="case-line"><b>Pickup Date:</b> ${escapeHtml(formatDate(o.pickup_date) || "—")}</p>
         <a class="secondary-btn" href="/case/${encodeURIComponent(o.case_code)}/print-cremation-sticker" target="_blank" rel="noopener" style="display:block; text-decoration:none; text-align:center; margin-top:14px;">🖨️ Print Cremation Tag (Office Printer)</a>
+        <a class="secondary-btn" href="/case/${encodeURIComponent(o.case_code)}/cremation-tag-image" download style="display:block; text-decoration:none; text-align:center; margin-top:8px;">🖼️ Save as Image (Phone or PDF)</a>
         <div class="cremate-actions" data-case="${escapeHtml(o.case_code)}">
           <button class="cremate-btn" data-case="${escapeHtml(o.case_code)}">🔥 Cremate</button>
         </div>
