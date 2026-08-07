@@ -9,6 +9,7 @@
   <header class="board-header">
     <h1>Cooler Status</h1>
     <div style="display:flex; align-items:center; gap:18px;">
+      <a class="export-btn" href="/scan" style="text-decoration:none;">📷 Scan Station</a>
       <button id="moveModeBtn" class="export-btn">📍 Move</button>
       <button id="historyModeBtn" class="export-btn">🕐 History</button>
       <a class="export-btn" href="{{ url_for('api_board_export') }}" style="text-decoration:none;">Export CSV</a>
