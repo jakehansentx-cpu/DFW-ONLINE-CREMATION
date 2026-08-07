@@ -1260,11 +1260,22 @@ def case_print_cremation_page(case_code):
         except ValueError:
             pass
 
+    # Pickup date if we have one; otherwise fall back to when the case
+    # was first created in the system, so the tag always shows a date.
+    if row["pickup_date"]:
+        received_date = format_date_for_sheet(row["pickup_date"])
+    else:
+        try:
+            dt = datetime.strptime(row["created_at"], "%Y-%m-%d %H:%M:%S")
+            received_date = f"{dt.month}/{dt.day}/{dt.strftime('%y')}"
+        except (ValueError, TypeError):
+            received_date = None
+
     return render_template(
         "case_print_cremation.html",
         case=row,
         case_code=case_code,
-        pickup_date=format_date_for_sheet(row["pickup_date"]),
+        pickup_date=received_date,
         staged_since=staged_since,
     )
 

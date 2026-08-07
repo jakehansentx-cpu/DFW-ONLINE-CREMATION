@@ -56,14 +56,10 @@
     text-overflow: ellipsis;
     flex-shrink: 0;
   }
-  .badge .line-name { font-size: 15pt; line-height: 1.3; }
-  .badge .line-home { font-size: 11pt; line-height: 1.3; }
-  .badge .line-date { font-size: 10pt; line-height: 1.3; color: #4a4d54; font-weight: 600; }
-  .badge .line-staged { font-size: 9pt; line-height: 1.3; color: #4a4d54; font-weight: 600; }
-  .badge .line-code {
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-size: 8pt; color: #6a6d74; margin-top: 0.05in; flex-shrink: 0;
-  }
+  .badge .line-name { font-size: 16pt; line-height: 1.3; }
+  .badge .line-home { font-size: 12pt; line-height: 1.3; }
+  .badge .line-date { font-size: 11pt; line-height: 1.3; color: #2a2c31; }
+  .badge .line-staged { font-size: 11pt; line-height: 1.3; color: #2a2c31; }
 
   @media print {
     body * { visibility: hidden; }
@@ -89,7 +85,6 @@
         {% if case.funeral_home %}<div class="line-home">{{ case.funeral_home }}</div>{% endif %}
         {% if pickup_date %}<div class="line-date">Pickup: {{ pickup_date }}</div>{% endif %}
         {% if staged_since %}<div class="line-staged">Moved to Staging: {{ staged_since }}</div>{% endif %}
-        <div class="line-code">{{ case_code }}</div>
       </div>
     </div>
   </div>
