@@ -404,7 +404,7 @@ startSheetCaseBtn.addEventListener("click", async () => {
     infoFormTitle.textContent = `Case ${currentCaseCode} (from sheet, row ${currentSheetRow})`;
     infoForm.classList.remove("hidden");
     clearInfoForm();
-    saveInfoBtn.textContent = "Save (writes to sheet + this app)";
+    saveInfoBtn.textContent = "Save";
     showStatus(`Pulled ${currentCaseCode} from the sheet. Fill in details.`, true);
   } catch (err) {
     showStatus(err.message, false);
