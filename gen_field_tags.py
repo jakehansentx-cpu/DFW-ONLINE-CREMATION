@@ -77,8 +77,9 @@ def build_field_tag_sheet(filename, codes):
         label_y = page_h - TOP_MARGIN - (row + 1) * LABEL_H
 
         qr_img = make_qr_image(f"{config.PUBLIC_HOST}/case/{code}")
-        qr_x = label_x + (LABEL_W - QR_SIZE) / 2
-        qr_y = label_y + (LABEL_H - QR_SIZE) / 2
+        qr_margin = (LABEL_H - QR_SIZE) / 2
+        qr_x = label_x + qr_margin  # flush to the label's left edge
+        qr_y = label_y + qr_margin
         c.drawImage(qr_img, qr_x, qr_y, width=QR_SIZE, height=QR_SIZE)
 
     c.save()
