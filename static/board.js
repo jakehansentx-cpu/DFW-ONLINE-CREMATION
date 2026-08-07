@@ -173,7 +173,7 @@ document.getElementById("closeHistory").addEventListener("click", () => {
   historyOverlay.classList.add("hidden");
 });
 
-async function handleMoveTap(loc, coolerName, shelfNum) {
+async function handleMoveTap(loc, coolerName, shelfNum, destCell) {
   const where = `${coolerName} — Shelf ${shelfNum}${loc.slot ? loc.slot : ""}`;
 
   if (!moveFromLoc) {
@@ -205,6 +205,11 @@ async function handleMoveTap(loc, coolerName, shelfNum) {
     return;
   }
 
+  // Instant reassurance that this is the destination -- same yellow
+  // outline as the source selection, applied the moment it's tapped
+  // rather than waiting on the network round-trip below.
+  if (destCell) destCell.classList.add("move-selected");
+
   try {
     const res = await fetch(isPlacement ? "/api/assign" : "/api/move", {
       method: "POST",
@@ -217,6 +222,7 @@ async function handleMoveTap(loc, coolerName, shelfNum) {
     resetMoveSelection();
     poll();
   } catch (err) {
+    if (destCell) destCell.classList.remove("move-selected");
     showMoveStatus(err.message, false);
   }
 }
@@ -370,7 +376,7 @@ function renderBoard(rows) {
               setTimeout(() => cell.classList.remove("search-highlight"), 1200);
               showHistory(loc, cooler.name, shelfNum);
             } else if (moveMode) {
-              handleMoveTap(loc, cooler.name, shelfNum);
+              handleMoveTap(loc, cooler.name, shelfNum, cell);
             } else {
               showDetail(loc, cooler.name, shelfNum);
             }
