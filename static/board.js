@@ -304,7 +304,6 @@ function renderBoard(rows) {
     if (r.case_code) {
       loc.occupants.push({
         case_code: r.case_code,
-        real_case_code: r.real_case_code,
         name: r.name,
         funeral_home: r.funeral_home,
         pickup_date: r.pickup_date,
@@ -413,19 +412,19 @@ function showDetail(loc, coolerName, shelfNum) {
     const blocks = loc.occupants
       .map((o, i) => {
         const isCremStaging = currentScreen === "Cremation Staging";
-        const displayCode = isCremStaging && o.real_case_code ? o.real_case_code : o.case_code;
 
         // Cremation Staging is a view-and-act popup, not an edit form --
         // no Save (editing happens on the sheet or scan station), and no
         // Release/Check Out since Cremate is the only exit from here that
         // makes sense; Move to New Location stays in case a decedent needs
-        // to go back to a cooler instead.
+        // to go back to a cooler instead. No case-code line either -- just
+        // the QR code, so staff don't have to reconcile it with an M26
+        // number by eye.
         if (isCremStaging) {
           return `
       <div class="occupant-block">
         <div class="case-qr-row">
-          <p class="case-line"><b>Case:</b> ${escapeHtml(displayCode)}</p>
-          <img class="case-qr-thumb" src="/case/${encodeURIComponent(o.case_code)}/qr.png" alt="QR code for ${escapeHtml(displayCode)}">
+          <img class="case-qr-thumb" src="/case/${encodeURIComponent(o.case_code)}/qr.png" alt="QR code for ${escapeHtml(o.name || o.case_code)}">
         </div>
         <p class="case-line"><b>Name:</b> ${escapeHtml(o.name || "—")}</p>
         <p class="case-line"><b>Funeral Home:</b> ${escapeHtml(o.funeral_home || "—")}</p>
