@@ -205,24 +205,6 @@
     <button id="resetBtn" class="secondary-btn">Reset</button>
   </div>
 
-  <!-- Admin/setup controls -- kept down here, out of the way of the
-       actual scanning workflow above, since they're only needed rarely
-       (switching months, or picking up a manually-typed sheet entry). -->
-  <div class="admin-section">
-    <button id="sheetToggleBtn" class="secondary-btn" style="margin-bottom:16px;">🗂️ This Month's Spreadsheet</button>
-    <div id="sheetPanel" class="info-form hidden">
-      <h3 style="margin-top:0;">This Month's Spreadsheet</h3>
-      <p id="sheetPanelMsg" style="color:#aab; font-size:14px;"></p>
-      <label>Spreadsheet Link</label>
-      <input id="sheetUrlInput" type="text" placeholder="Paste the Google Sheets link here" autocomplete="off">
-      <button id="sheetSetBtn" class="primary-btn">Save New Spreadsheet</button>
-      <div id="sheetSetStatus" class="status-msg"></div>
-    </div>
-
-    <button id="syncSheetBtn" class="secondary-btn" style="margin-bottom:16px;">🔄 Sync Manual Entries From Sheet</button>
-    <div id="syncResults" class="info-form hidden"></div>
-  </div>
-
   <script src="{{ url_for('static', filename='jsQR.js') }}"></script>
   <script src="{{ url_for('static', filename='scan.js') }}"></script>
   <script>

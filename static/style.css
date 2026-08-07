@@ -267,9 +267,7 @@ body {
 }
 .staff-row.unset { border-color: rgba(240,183,79,.5); }
 
-#sheetToggleBtn.attention {
-  background: rgba(240,183,79,.15); border: 1px solid rgba(240,183,79,.5); color: #f0b74f;
-}
+.info-form.attention { border: 1px solid rgba(240,183,79,.5); }
 
 .mode-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .mode-btn {
@@ -352,12 +350,6 @@ body {
   background: #333; color: #ccc; border: none; border-radius: 8px;
 }
 .reset-row { margin-top: 20px; }
-
-.admin-section {
-  margin-top: 32px;
-  padding-top: 20px;
-  border-top: 1px solid #263042;
-}
 
 .history-list { display: flex; flex-direction: column; gap: 8px; }
 .history-row {

@@ -34,6 +34,15 @@
     <div id="userList" class="inventory-list"></div>
   </div>
 
+  <div id="sheetPanel" class="info-form">
+    <h3 style="margin-top:0;">This Month's Spreadsheet</h3>
+    <p id="sheetPanelMsg" style="color:#aab; font-size:14px;"></p>
+    <label>Spreadsheet Link</label>
+    <input id="sheetUrlInput" type="text" placeholder="Paste the Google Sheets link here" autocomplete="off">
+    <button id="sheetSetBtn" class="primary-btn">Save New Spreadsheet</button>
+    <div id="sheetSetStatus" class="status-msg"></div>
+  </div>
+
   <div id="historyOverlay" class="detail-overlay hidden">
     <div class="detail-card">
       <button id="closeHistory" class="close-btn">&times;</button>

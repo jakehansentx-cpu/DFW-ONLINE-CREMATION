@@ -151,3 +151,60 @@ addUserBtn.addEventListener("click", async () => {
 });
 
 renderUsers();
+
+// ---------------- Monthly spreadsheet ----------------
+// A new call log spreadsheet gets generated every month. New intakes
+// auto-adopt it on their own the moment anyone actually pulls a new case
+// number (see _maybe_auto_adopt_new_month_sheet in app.py) -- this panel
+// is only needed as a manual fallback if that automation didn't run or
+// the new sheet's share step failed for some reason.
+const sheetPanel = document.getElementById("sheetPanel");
+const sheetPanelMsg = document.getElementById("sheetPanelMsg");
+const sheetUrlInput = document.getElementById("sheetUrlInput");
+const sheetSetBtn = document.getElementById("sheetSetBtn");
+const sheetSetStatus = document.getElementById("sheetSetStatus");
+
+sheetSetBtn.addEventListener("click", async () => {
+  sheetSetStatus.textContent = "Checking access...";
+  sheetSetStatus.className = "status-msg";
+  sheetSetBtn.disabled = true;
+  try {
+    const res = await fetch("/api/settings/sheet", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: sheetUrlInput.value }),
+    });
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error || "Couldn't save that spreadsheet");
+    sheetSetStatus.textContent = `Saved. New intakes now go to "${result.label}".`;
+    sheetSetStatus.className = "status-msg ok";
+    sheetUrlInput.value = "";
+    sheetPanel.classList.remove("attention");
+  } catch (err) {
+    sheetSetStatus.textContent = err.message;
+    sheetSetStatus.className = "status-msg err";
+  } finally {
+    sheetSetBtn.disabled = false;
+  }
+});
+
+(async function checkSheetStatus() {
+  try {
+    const res = await fetch("/api/settings/sheet-status");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.auto_adopted_label) {
+      sheetPanelMsg.textContent = `Currently set to "${data.current_sheet_label}" (auto-detected). Paste a new link below if you ever need to switch it manually.`;
+    } else if (data.needs_new_sheet) {
+      sheetPanel.classList.add("attention");
+      sheetPanelMsg.textContent =
+        "A new month has started and no new sheet has been auto-detected yet -- paste this month's spreadsheet link below so new intakes go to the right place. Cases already in progress are unaffected.";
+    } else {
+      sheetPanelMsg.textContent = data.current_sheet_label
+        ? `Currently set to "${data.current_sheet_label}". Paste a new link below to switch it.`
+        : "Paste a new spreadsheet link below to switch it.";
+    }
+  } catch (e) {
+    console.error("sheet status check failed", e);
+  }
+})();

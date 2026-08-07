@@ -479,6 +479,21 @@ def _resolve_field_tag(db, case_code):
 
     if not config.GOOGLE_SHEETS_ENABLED:
         return None, ("Can't claim a case number for a field tag -- Google Sheets is disabled", 503)
+
+    _maybe_auto_adopt_new_month_sheet(db)
+
+    # Before claiming a fresh case number, pick up anything staff typed
+    # straight into the sheet instead of going through the app (see
+    # run_sheet_sync). This used to be a separate "Sync Manual Entries"
+    # button staff had to remember to press; running it here means it
+    # just always happens at the one moment it actually matters -- right
+    # before a blank tag is about to be handed the next available row.
+    # Best-effort: a sync hiccup shouldn't block claiming a case number.
+    try:
+        run_sheet_sync(db, request.host_url.rstrip("/"))
+    except Exception as e:
+        print(f"[field-tag claim] manual-entry sync failed, continuing anyway: {e}")
+
     try:
         _sheet_row, real_case_code = _sheets().find_next_unclaimed_case(current_sheet_id(db))
     except Exception as e:
@@ -1148,39 +1163,51 @@ def _adopt_sheet(db, sheet_id, label):
     db.commit()
 
 
+def _maybe_auto_adopt_new_month_sheet(db):
+    """Checks whether a new calendar month has started and, if so, tries
+    to auto-adopt the sheet the Apps Script rollover (see
+    apps_script/monthly_sheet_rollover.gs) should have already created
+    and shared for it -- so new intakes land on the right sheet without
+    anyone needing to visit Admin. Called at the two points that actually
+    pull a NEW case number (Start New Case, and claiming a blank field
+    tag); every other action keeps working fine off whichever sheet each
+    existing case already remembers.
+
+    Returns the adopted label on success, or None if nothing changed
+    (already on the current month, Sheets disabled, or the new sheet
+    isn't found/shared yet -- Admin's manual panel is the fallback for
+    that last case)."""
+    if not config.GOOGLE_SHEETS_ENABLED:
+        return None
+    real_month = datetime.now().strftime("%Y-%m")
+    if get_setting(db, "current_sheet_month") == real_month:
+        return None
+    try:
+        expected_name = expected_sheet_name(datetime.now())
+        found_id = _sheets().find_shared_sheet_by_name(expected_name)
+        if found_id:
+            _sheets().verify_access(found_id)
+            _adopt_sheet(db, found_id, expected_name.title())
+            return expected_name.title()
+    except Exception:
+        pass  # Drive lookup hiccup -- Admin's manual panel still covers this
+    return None
+
+
 @app.route("/api/settings/sheet-status")
-@login_required
+@admin_required
 def api_sheet_status():
     """Whether it's time to nag for a new monthly spreadsheet -- compares
     the real calendar month against the month the current sheet was set
-    for. Only pulling a NEW case number (Decedent Information / sheet
-    intake) actually needs this; every other action keeps working fine
-    off whichever sheet each existing case already remembers.
-
-    Before falling back to the manual "paste a link" prompt, this first
-    checks whether a new sheet has already been auto-created and shared
-    with the service account (see apps_script/monthly_sheet_rollover.gs)
-    and, if so, adopts it automatically -- no staff action needed most
-    months. The manual panel is still there as a fallback in case that
-    automation didn't run or the share step failed for some reason.
+    for. Lives on the Admin page: new intakes auto-adopt the new month's
+    sheet on their own (see _maybe_auto_adopt_new_month_sheet), so this
+    manual panel is only needed as a fallback when that automation didn't
+    run or the share step failed for some reason.
     """
     db = get_db()
     real_month = datetime.now().strftime("%Y-%m")
-    stored_month = get_setting(db, "current_sheet_month")
-    needs_new_sheet = stored_month != real_month
-    auto_adopted_label = None
-
-    if needs_new_sheet and config.GOOGLE_SHEETS_ENABLED:
-        try:
-            expected_name = expected_sheet_name(datetime.now())
-            found_id = _sheets().find_shared_sheet_by_name(expected_name)
-            if found_id:
-                _sheets().verify_access(found_id)
-                _adopt_sheet(db, found_id, expected_name.title())
-                needs_new_sheet = False
-                auto_adopted_label = expected_name.title()
-        except Exception:
-            pass  # Drive lookup hiccup -- the manual panel still covers this
+    auto_adopted_label = _maybe_auto_adopt_new_month_sheet(db)
+    needs_new_sheet = get_setting(db, "current_sheet_month") != real_month
 
     return jsonify(
         needs_new_sheet=needs_new_sheet,
@@ -1192,7 +1219,7 @@ def api_sheet_status():
 
 
 @app.route("/api/settings/sheet", methods=["POST"])
-@login_required
+@admin_required
 def api_set_sheet():
     """Points new intakes at a newly-generated monthly spreadsheet. Cases
     already created against a previous sheet are unaffected -- they keep
@@ -1249,9 +1276,10 @@ def run_sheet_sync(db, base_url):
     so it behaves exactly like an app-driven intake from here on. Safe
     to run repeatedly -- already-tracked rows are skipped every time.
 
-    Shared by the on-demand /api/sheet-sync route (base_url from the
-    live request) and the automatic background loop (base_url from
-    config.PUBLIC_HOST, since there's no request to read one from there).
+    Runs automatically right before a blank field tag claims its case
+    number (see _resolve_field_tag, base_url from the live request) and
+    on the background loop's own timer (base_url from config.PUBLIC_HOST,
+    since there's no request to read one from there).
     """
     sid = current_sheet_id(db)
     rows = _sheets().read_rows(sid)
@@ -1328,30 +1356,13 @@ def run_sheet_sync(db, base_url):
     return synced
 
 
-@app.route("/api/sheet-sync", methods=["POST"])
-@login_required
-def api_sheet_sync():
-    """On-demand version of run_sheet_sync -- the scan station's
-    "Sync Manual Entries From Sheet" button. See _background_sync_loop
-    for the automatic version that runs on its own timer."""
-    if not config.GOOGLE_SHEETS_ENABLED:
-        return jsonify(error="Google Sheets isn't turned on yet (see config.py)"), 400
-
-    db = get_db()
-    try:
-        synced = run_sheet_sync(db, request.host_url.rstrip("/"))
-    except Exception as e:
-        return jsonify(error=f"Couldn't reach the spreadsheet: {e}"), 502
-
-    return jsonify(ok=True, synced=synced)
-
-
 def _background_sync_loop():
     """Runs run_sheet_sync automatically every
     config.SHEET_SYNC_INTERVAL_MINUTES, so a decedent typed straight into
     the sheet gets an armband tag/QR/board tracking within a few minutes
-    even if nobody remembers to press the Sync button -- and, in the same
-    cycle, releases any blank field-tag claims that have sat unused past
+    even between blank-tag scans (see _resolve_field_tag for the other,
+    on-demand trigger) -- and, in the same cycle, releases any blank
+    field-tag claims that have sat unused past
     config.RELEASE_STALE_CLAIMS_AFTER_MINUTES (see
     release_stale_field_claims above). Own thread, own DB connection --
     Flask's request-scoped get_db() isn't usable outside an actual
@@ -2471,6 +2482,7 @@ def api_sheet_intake_start():
         return jsonify(error="Google Sheets intake isn't turned on yet (see config.py)"), 400
 
     db = get_db()
+    _maybe_auto_adopt_new_month_sheet(db)
     sid = current_sheet_id(db)
     try:
         row_num, case_code = _sheets().find_next_unclaimed_case(sid)
