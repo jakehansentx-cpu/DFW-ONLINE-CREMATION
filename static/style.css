@@ -301,12 +301,6 @@ body {
 .camera-panel video.tap-to-capture { cursor: pointer; }
 .camera-tap-hint { text-align: center; color: #aab; font-size: 13px; margin: 8px 0 0; }
 
-.icon-camera-btn {
-  display: block; margin: 8px auto 0; width: 56px; height: 56px;
-  font-size: 26px; line-height: 1; border-radius: 50%;
-  background: #263447; color: #cdd; border: 1px solid #345;
-}
-
 .pending-badge {
   background: rgba(240,183,79,.12); border: 1px solid rgba(240,183,79,.35);
   color: #f0b74f; border-radius: 8px; padding: 10px 14px; font-size: 14px;
