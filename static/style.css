@@ -305,7 +305,7 @@ body {
 .status-msg.err { color: #ff9d9d; }
 
 .camera-btn {
-  width: 100%; margin-top: 12px; padding: 12px; font-size: 15px;
+  width: 100%; margin-top: 12px; padding: 18px; font-size: 19px; font-weight: 600;
   background: #263447; color: #cdd; border: 1px solid #345; border-radius: 8px;
 }
 .camera-panel { margin-top: 14px; }
