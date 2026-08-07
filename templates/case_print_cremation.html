@@ -26,19 +26,21 @@
     align-items: center;
     justify-content: center;
   }
+  /* 2x each dimension of one physical label = ~4x the visual area,
+     while still comfortably fitting the 8.5x11 page. */
   .badge {
-    width: 4in;
-    height: 3.3333in;
+    width: 8in;
+    height: 6.6667in;
     box-sizing: border-box;
-    padding: 0.15in 0.25in;
+    padding: 0.3in 0.5in;
     color: #14151a;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.08in;
+    gap: 0.16in;
   }
-  .badge .qr-box { width: 1.6in; height: 1.6in; flex-shrink: 0; }
+  .badge .qr-box { width: 3.2in; height: 3.2in; flex-shrink: 0; }
   .badge .qr-box img { width: 100%; height: 100%; display: block; }
   .badge .line-name,
   .badge .line-home,
@@ -53,10 +55,10 @@
     text-overflow: ellipsis;
     flex-shrink: 0;
   }
-  .badge .line-name { font-size: 16pt; line-height: 1.3; }
-  .badge .line-home { font-size: 12pt; line-height: 1.3; }
-  .badge .line-date { font-size: 11pt; line-height: 1.3; color: #2a2c31; }
-  .badge .line-staged { font-size: 11pt; line-height: 1.3; color: #2a2c31; }
+  .badge .line-name { font-size: 32pt; line-height: 1.3; }
+  .badge .line-home { font-size: 24pt; line-height: 1.3; }
+  .badge .line-date { font-size: 22pt; line-height: 1.3; color: #2a2c31; }
+  .badge .line-staged { font-size: 22pt; line-height: 1.3; color: #2a2c31; }
 
   @media print {
     body * { visibility: hidden; }
@@ -69,7 +71,7 @@
 <body class="scan-body">
   <div class="print-toolbar">
     <button class="primary-btn" onclick="window.print()">Print Cremation Sticker</button>
-    <p>Plain letter-size page, sized to one Avery 5164 label (4" x 3-1/3"). Copy this into Avery's Design &amp; Print Online tool to lay it out on the actual 6-up sheet.</p>
+    <p>Plain letter-size page, enlarged (~4x) for an easier copy into Avery's Design &amp; Print Online tool, which handles sizing it down to fit the actual 6-up sheet.</p>
   </div>
 
   <div id="sheet">
@@ -95,10 +97,10 @@
     }
     window.addEventListener("load", () => {
       document.querySelectorAll(".badge").forEach((badge) => {
-        autoFitLine(badge.querySelector(".line-name"), 8);
-        autoFitLine(badge.querySelector(".line-home"), 6);
-        autoFitLine(badge.querySelector(".line-date"), 6);
-        autoFitLine(badge.querySelector(".line-staged"), 6);
+        autoFitLine(badge.querySelector(".line-name"), 16);
+        autoFitLine(badge.querySelector(".line-home"), 12);
+        autoFitLine(badge.querySelector(".line-date"), 12);
+        autoFitLine(badge.querySelector(".line-staged"), 12);
       });
     });
   </script>
