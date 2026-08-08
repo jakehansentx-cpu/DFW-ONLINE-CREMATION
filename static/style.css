@@ -365,6 +365,29 @@ p.case-line + p.case-line { margin-top: 6px; }
   width: 100%; padding: 12px; font-size: 15px;
   background: #333; color: #ccc; border: none; border-radius: 8px;
 }
+
+/* Immediate "I registered your tap" feedback on every button-like
+   element app-wide (scan station, board, admin) -- darkens the instant
+   a finger presses down, back to normal on release. Darken rather than
+   red, since red already means something specific elsewhere (Release,
+   Cremate danger actions) and using it here would blur that signal.
+   touch-action:manipulation drops the ~300ms tap delay some mobile
+   browsers add, so this feels instant rather than laggy. */
+button, .primary-btn, .secondary-btn, .home-mode-btn, .home-scan-btn, .camera-btn {
+  touch-action: manipulation;
+}
+button:active, .primary-btn:active, .secondary-btn:active,
+.home-mode-btn:active, .home-scan-btn:active, .camera-btn:active {
+  filter: brightness(0.72);
+}
+/* The "working, please wait" state a busy action switches to (see
+   withBusy() in scan.js/board.js/admin.js) -- greyed out and inert
+   instead of the press-darken above, so mid-request looks clearly
+   different from "ready to tap again". */
+button:disabled, .primary-btn:disabled, .secondary-btn:disabled,
+.home-mode-btn:disabled, .home-scan-btn:disabled, .camera-btn:disabled {
+  opacity: 0.55; cursor: not-allowed; filter: none;
+}
 .reset-row { margin-top: 20px; }
 
 .history-list { display: flex; flex-direction: column; gap: 8px; }

@@ -255,11 +255,21 @@ function askConfirm(message, onConfirm) {
   pendingConfirmAction = onConfirm;
   confirmBox.classList.remove("hidden");
 }
-confirmYesBtn.addEventListener("click", () => {
-  confirmBox.classList.add("hidden");
+confirmYesBtn.addEventListener("click", async () => {
   const action = pendingConfirmAction;
   pendingConfirmAction = null;
-  if (action) action();
+  if (!action) {
+    confirmBox.classList.add("hidden");
+    return;
+  }
+  // Keep the confirm box open (not hidden until after the action
+  // finishes) so the "Working…" state on Yes is actually visible --
+  // Release/Cremate are exactly the actions where staff most need to
+  // see it's in progress rather than tapping again.
+  confirmNoBtn.disabled = true;
+  await withBusy(confirmYesBtn, "Working…", action);
+  confirmNoBtn.disabled = false;
+  confirmBox.classList.add("hidden");
 });
 confirmNoBtn.addEventListener("click", () => {
   confirmBox.classList.add("hidden");
@@ -450,6 +460,7 @@ function clearInfoForm() {
 }
 
 startSheetCaseBtn.addEventListener("click", async () => {
+  await withBusy(startSheetCaseBtn, "Pulling next case…", async () => {
   try {
     const result = await postJSON("/api/sheet-intake/start", {}, 25000);
     currentCaseCode = result.case_code;
@@ -469,11 +480,33 @@ startSheetCaseBtn.addEventListener("click", async () => {
   } catch (err) {
     showStatus(err.message, false);
   }
+  });
 });
 
 function showStatus(text, ok) {
   statusMsg.textContent = text;
   statusMsg.className = "status-msg " + (ok ? "ok" : "err");
+}
+
+// Disables a button and swaps its label to a "working" message for the
+// duration of an async action (typically a server round-trip), then
+// restores both -- makes it impossible to double-tap while waiting, and
+// gives a clear "the app is working on it" cue instead of looking
+// frozen/unresponsive. The instant press-darken feedback (CSS :active,
+// see style.css) is separate and applies to every button automatically
+// the moment it's touched; this is specifically for the "please wait
+// for a response" state that follows.
+async function withBusy(btn, workingLabel, fn) {
+  if (!btn) return fn();
+  const original = btn.textContent;
+  btn.disabled = true;
+  if (workingLabel) btn.textContent = workingLabel;
+  try {
+    return await fn();
+  } finally {
+    btn.disabled = false;
+    if (workingLabel) btn.textContent = original;
+  }
 }
 
 // fetch with a timeout, so a dead/slow connection fails fast instead of
@@ -1186,6 +1219,7 @@ function renderFindResults(matches) {
 }
 
 saveInfoBtn.addEventListener("click", async () => {
+  await withBusy(saveInfoBtn, "Saving…", async () => {
   const body = {
     name: document.getElementById("fName").value,
     funeral_home: document.getElementById("fHome").value,
@@ -1244,6 +1278,7 @@ saveInfoBtn.addEventListener("click", async () => {
   } catch (err) {
     showStatus(err.message, false);
   }
+  });
 });
 
 async function doRelease() {
@@ -1303,6 +1338,7 @@ confirmCremateBtn.addEventListener("click", () => {
 });
 
 confirmCheckoutBtn.addEventListener("click", async () => {
+  await withBusy(confirmCheckoutBtn, "Checking out…", async () => {
   try {
     const result = await postJSON("/api/checkout", {
       case_code: currentCaseCode,
@@ -1316,9 +1352,11 @@ confirmCheckoutBtn.addEventListener("click", async () => {
   } catch (err) {
     showStatus(err.message, false);
   }
+  });
 });
 
 confirmCheckinBtn.addEventListener("click", async () => {
+  await withBusy(confirmCheckinBtn, "Checking in…", async () => {
   try {
     const result = await postJSON("/api/checkin", { case_code: currentCaseCode, staff: getStaffName() });
     const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
@@ -1329,6 +1367,7 @@ confirmCheckinBtn.addEventListener("click", async () => {
   } catch (err) {
     showStatus(err.message, false);
   }
+  });
 });
 
 // ---------------- Inventory ----------------
