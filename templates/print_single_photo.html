@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ page_title }} — {{ case_code }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<style>
+  .print-toolbar { text-align: center; padding: 16px; }
+  .single-print-page { max-width: 700px; margin: 0 auto; padding: 0 16px; color: #14151a; background: #fff; text-align: center; }
+  .single-print-page h1 { font-size: 16pt; margin: 0 0 4px; }
+  .single-print-page .meta { font-size: 11pt; color: #444; margin-bottom: 20px; }
+  .single-print-page img { max-width: 100%; border: 1px solid #999; }
+
+  @media print {
+    body { background: #fff; }
+    .print-toolbar { display: none; }
+  }
+</style>
+</head>
+<body class="scan-body" style="background:#fff;">
+  <div class="print-toolbar">
+    <button class="primary-btn" onclick="window.print()">Print (Office Printer)</button>
+  </div>
+
+  <div class="single-print-page">
+    <h1>{{ heading }}</h1>
+    <div class="meta">
+      Case {{ case_code }}{% if name %} — {{ name }}{% endif %}<br>
+      {{ when }}{% if staff %} — {{ staff }}{% endif %}
+    </div>
+    <img src="{{ photo_url }}" alt="">
+  </div>
+</body>
+</html>

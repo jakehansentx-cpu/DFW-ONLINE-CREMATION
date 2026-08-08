@@ -1872,6 +1872,78 @@ def document_photo(doc_id):
     return app.response_class(photo_path.read_bytes(), mimetype="image/jpeg")
 
 
+@app.route("/documents/<int:doc_id>/print")
+@login_required
+def print_single_document_page(doc_id):
+    """Printable page for one scanned document -- for pulling just, say,
+    the ID card or authorization form out of a case's paperwork instead
+    of printing everything."""
+    db = get_db()
+    item = db.execute(
+        "SELECT cd.*, c.case_code, c.name FROM case_documents cd "
+        "JOIN cases c ON c.id = cd.case_id WHERE cd.id = ?",
+        (doc_id,),
+    ).fetchone()
+    if item is None:
+        return jsonify(error="Unknown document"), 404
+    return render_template(
+        "print_single_photo.html",
+        page_title=item["doc_type"] or "Document",
+        heading=item["doc_type"] or "(untitled document)",
+        case_code=item["case_code"],
+        name=item["name"],
+        photo_url=url_for("document_photo", doc_id=doc_id),
+        when=_format_when(item["created_at"]),
+        staff=item["staff"],
+    )
+
+
+@app.route("/case/<case_code>/print-documents")
+@login_required
+def case_print_documents_page(case_code):
+    """Printable page of every scanned document for this case (office
+    printer) -- for handing over or filing the whole set at once."""
+    db = get_db()
+    case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
+    if case is None:
+        return jsonify(error="Unknown case code"), 404
+    items = [
+        {**item, "photo_url": url_for("document_photo", doc_id=item["id"])}
+        for item in get_case_documents(db, case["id"])
+    ]
+    return render_template(
+        "case_print_documents.html",
+        case=case,
+        case_code=case_code,
+        items=items,
+    )
+
+
+@app.route("/inventory/<int:item_id>/print")
+@login_required
+def print_single_inventory_photo_page(item_id):
+    """Printable page for one inventory item's photo -- the single-item
+    counterpart to case_print_inventory_page's print-everything view."""
+    db = get_db()
+    item = db.execute(
+        "SELECT ii.*, c.case_code, c.name FROM inventory_items ii "
+        "JOIN cases c ON c.id = ii.case_id WHERE ii.id = ?",
+        (item_id,),
+    ).fetchone()
+    if item is None or not item["photo_filename"]:
+        return jsonify(error="No photo for this item"), 404
+    return render_template(
+        "print_single_photo.html",
+        page_title=item["description"] or "Inventory Photo",
+        heading=item["description"] or "(photo only)",
+        case_code=item["case_code"],
+        name=item["name"],
+        photo_url=url_for("inventory_photo", item_id=item_id),
+        when=_format_when(item["created_at"]),
+        staff=item["staff"],
+    )
+
+
 @app.route("/case/<case_code>/print")
 @login_required
 def case_print_page(case_code):

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Documents — {{ case_code }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<style>
+  .print-toolbar { text-align: center; padding: 16px; }
+  .inv-print-page { max-width: 800px; margin: 0 auto; padding: 0 16px; color: #14151a; background: #fff; }
+  .inv-print-header { text-align: center; margin-bottom: 24px; }
+  .inv-print-header h1 { font-size: 18pt; margin: 0 0 4px; }
+  .inv-print-header .meta { font-size: 11pt; color: #444; }
+  .doc-print-item {
+    break-inside: avoid; page-break-inside: avoid; page-break-after: always;
+    text-align: center; padding: 16px 0;
+  }
+  .doc-print-item:last-child { page-break-after: auto; }
+  .doc-print-item img { max-width: 100%; border: 1px solid #999; }
+  .doc-print-item .caption { font-size: 11pt; margin-bottom: 10px; }
+  .inv-print-empty { text-align: center; color: #667; padding: 40px 0; }
+
+  @media print {
+    body { background: #fff; }
+    .print-toolbar { display: none; }
+  }
+</style>
+</head>
+<body class="scan-body" style="background:#fff;">
+  <div class="print-toolbar">
+    <button class="primary-btn" onclick="window.print()">Print (Office Printer)</button>
+  </div>
+
+  <div class="inv-print-page">
+    <div class="inv-print-header">
+      <h1>Scanned Documents</h1>
+      <div class="meta">
+        Case {{ case_code }}{% if case.name %} — {{ case.name }}{% endif %}<br>
+        {% if case.funeral_home %}{{ case.funeral_home }}<br>{% endif %}
+        Printed {{ items | length }} document{{ "s" if items | length != 1 else "" }}
+      </div>
+    </div>
+
+    {% if items %}
+      {% for item in items %}
+        <div class="doc-print-item">
+          <div class="caption">
+            <b>{{ item.doc_type or "(untitled document)" }}</b> — {{ item.when }}{% if item.staff %} — {{ item.staff }}{% endif %}
+          </div>
+          <img src="{{ item.photo_url }}" alt="">
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="inv-print-empty">No documents scanned for this case.</p>
+    {% endif %}
+  </div>
+</body>
+</html>

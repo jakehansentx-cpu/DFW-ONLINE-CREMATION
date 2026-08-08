@@ -211,6 +211,11 @@
     <button id="resetBtn" class="secondary-btn">Reset</button>
   </div>
 
+  <div id="photoLightbox" class="detail-overlay hidden">
+    <button class="close-btn" id="photoLightboxCloseBtn">&times;</button>
+    <img id="photoLightboxImg" src="" alt="" style="max-width:92vw; max-height:88vh; border-radius:8px;">
+  </div>
+
   <script src="{{ url_for('static', filename='jsQR.js') }}"></script>
   <script src="{{ url_for('static', filename='scan.js') }}"></script>
   <script>

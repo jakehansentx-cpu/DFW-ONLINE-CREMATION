@@ -54,6 +54,25 @@ const confirmBox = document.getElementById("confirmBox");
 const confirmMessage = document.getElementById("confirmMessage");
 const confirmYesBtn = document.getElementById("confirmYesBtn");
 const confirmNoBtn = document.getElementById("confirmNoBtn");
+const photoLightbox = document.getElementById("photoLightbox");
+const photoLightboxImg = document.getElementById("photoLightboxImg");
+const photoLightboxCloseBtn = document.getElementById("photoLightboxCloseBtn");
+
+function openPhotoLightbox(src) {
+  photoLightboxImg.src = src;
+  photoLightbox.classList.remove("hidden");
+}
+function closePhotoLightbox() {
+  photoLightbox.classList.add("hidden");
+  photoLightboxImg.src = "";
+}
+photoLightboxCloseBtn.addEventListener("click", closePhotoLightbox);
+photoLightbox.addEventListener("click", (e) => {
+  if (e.target === photoLightbox) closePhotoLightbox();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closePhotoLightbox();
+});
 const inventoryPanel = document.getElementById("inventoryPanel");
 const inventoryTitle = document.getElementById("inventoryTitle");
 const inventoryList = document.getElementById("inventoryList");
@@ -1305,19 +1324,29 @@ function renderInventoryList(items) {
     inventoryList.innerHTML = `<p style="color:#889; margin:0;">No items logged yet.</p>`;
     return;
   }
+  const hasAnyPhoto = items.some((item) => item.has_photo);
   inventoryList.innerHTML = items
     .map(
       (item) => `
     <div class="inventory-row">
-      ${item.has_photo ? `<img class="inventory-thumb" src="/api/inventory/${item.id}/photo" alt="">` : ""}
+      ${item.has_photo ? `<img class="inventory-thumb" src="/api/inventory/${item.id}/photo" alt="" data-lightbox-src="/api/inventory/${item.id}/photo">` : ""}
       <div class="inventory-info">
         <div>${escapeHtmlLocal(item.description || "(photo only)")}</div>
         <div style="color:#889; font-size:12.5px;">${escapeHtmlLocal(item.when)}${item.staff ? " — " + escapeHtmlLocal(item.staff) : ""}</div>
       </div>
-      <button class="inventory-delete-btn" data-id="${item.id}">Delete</button>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        ${item.has_photo ? `<a href="/inventory/${item.id}/print" target="_blank" rel="noopener" style="text-align:center; text-decoration:none; padding:8px 12px; background:#263447; color:#cdd; border-radius:6px; font-size:14px;">🖨️ Print</a>` : ""}
+        <button class="inventory-delete-btn" data-id="${item.id}">Delete</button>
+      </div>
     </div>`
     )
-    .join("");
+    .join("") + (hasAnyPhoto && currentCaseCode
+      ? `<a href="/case/${encodeURIComponent(currentCaseCode)}/print-inventory" target="_blank" rel="noopener" class="secondary-btn" style="display:block; text-decoration:none; text-align:center; margin-top:12px;">🖨️ Print All Photos (Office Printer)</a>`
+      : "");
+
+  inventoryList.querySelectorAll(".inventory-thumb").forEach((img) => {
+    img.addEventListener("click", () => openPhotoLightbox(img.dataset.lightboxSrc));
+  });
 
   inventoryList.querySelectorAll(".inventory-delete-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -1535,15 +1564,24 @@ function renderDocumentsList(items) {
     .map(
       (item) => `
     <div class="inventory-row">
-      <img class="inventory-thumb" src="/api/documents/${item.id}/photo" alt="">
+      <img class="inventory-thumb" src="/api/documents/${item.id}/photo" alt="" data-lightbox-src="/api/documents/${item.id}/photo">
       <div class="inventory-info">
         <div>${escapeHtmlLocal(item.doc_type || "(untitled document)")}</div>
         <div style="color:#889; font-size:12.5px;">${escapeHtmlLocal(item.when)}${item.staff ? " — " + escapeHtmlLocal(item.staff) : ""}</div>
       </div>
-      <button class="document-delete-btn" data-id="${item.id}">Delete</button>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <a href="/documents/${item.id}/print" target="_blank" rel="noopener" style="text-align:center; text-decoration:none; padding:8px 12px; background:#263447; color:#cdd; border-radius:6px; font-size:14px;">🖨️ Print</a>
+        <button class="document-delete-btn" data-id="${item.id}">Delete</button>
+      </div>
     </div>`
     )
-    .join("");
+    .join("") + (currentCaseCode
+      ? `<a href="/case/${encodeURIComponent(currentCaseCode)}/print-documents" target="_blank" rel="noopener" class="secondary-btn" style="display:block; text-decoration:none; text-align:center; margin-top:12px;">🖨️ Print All Documents (Office Printer)</a>`
+      : "");
+
+  documentsList.querySelectorAll(".inventory-thumb").forEach((img) => {
+    img.addEventListener("click", () => openPhotoLightbox(img.dataset.lightboxSrc));
+  });
 
   documentsList.querySelectorAll(".document-delete-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
