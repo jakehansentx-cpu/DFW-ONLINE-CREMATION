@@ -5,7 +5,9 @@ Column layout (matches your sheet):
     A = case number
     B = date
     C = time received (first call)
-    D = decedent name
+    D = decedent name -- font turns orange while temporarily checked out
+        (autopsy, organ/tissue donation, etc.), back to black once
+        checked back in (see set_case_checked_out_color())
     E = funeral home
     F = removal type
     G = disposition
@@ -33,11 +35,22 @@ Column layout (matches your sheet):
         (linked to the case page instead). Always one or the other,
         never blank -- see backfill_inventory_status(). NOT released-to
         (M's "Released to <X>" already covers that) and NOT column Q.
-    P = checkout status -- filled in while a decedent is temporarily
-        checked out (autopsy, organ/tissue donation, etc.), cleared
-        back to blank once checked back in
+    P = Documents (the sheet's real header) -- "NO DOCUMENTS" (linked to
+        the scan app's Scan Document panel for the case) until the first
+        document is scanned, then "Yes" (linked to the case page
+        instead). Same always-explicit-never-blank pattern as O -- see
+        backfill_documents_status(). Checkout status used to live here
+        (see D above for where that moved).
     Q = Notes -- free text for staff's own use. The app never writes
         here.
+    R = Days in Storage -- billable time in our care. Starts counting
+        the day a case is created (entered into the system), keeps
+        running through any temporary checkout/check-in (that doesn't
+        pause it), and stops the day the decedent is released or
+        cremated. While still in storage this is a live formula that
+        recalculates on its own every day the sheet is opened (no daily
+        job needed); once released/cremated it's frozen to a fixed
+        number so billing stops accruing. See backfill_storage_days().
 
 "Next available case number" = the first row, scanning top to bottom,
 where column A has a value but B, D, and E are all still empty. That's
@@ -480,15 +493,103 @@ def backfill_released_to(sheet_id, row_num, released_to):
     ).execute()
 
 
-def backfill_checkout(sheet_id, row_num, summary):
-    """Writes the current checkout status into column P -- an empty
-    string clears it back to blank once the decedent is checked back
-    in."""
+def set_case_checked_out_color(sheet_id, row_num, checked_out):
+    """Colors column D's (decedent name) font orange while a decedent is
+    temporarily checked out (autopsy, organ/tissue donation, etc.),
+    clearing it back to the default black once checked back in.
+    Replaces the old column P text summary (used to be
+    backfill_checkout) -- checkout is infrequent enough that a color
+    cue on the name itself is plenty, and it frees column P for
+    Documents status instead (see backfill_documents_status)."""
+    service = _get_service()
+    grid_id = _tab_grid_id(sheet_id)
+    color = {"red": 0.90, "green": 0.49, "blue": 0.13} if checked_out else {"red": 0, "green": 0, "blue": 0}
+    body = {
+        "requests": [
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": grid_id,
+                        "startRowIndex": row_num - 1,
+                        "endRowIndex": row_num,
+                        "startColumnIndex": 3,  # column D
+                        "endColumnIndex": 4,
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "textFormat": {"foregroundColor": color}
+                        }
+                    },
+                    "fields": "userEnteredFormat.textFormat.foregroundColor",
+                }
+            }
+        ]
+    }
+    service.spreadsheets().batchUpdate(spreadsheetId=sheet_id, body=body).execute()
+
+
+def row_has_documents_flag(sheet_id, row_num):
+    """True only if column P (Documents) is already showing "Yes" for
+    this row -- mirrors row_has_inventory_flag."""
+    service = _get_service()
+    result = (
+        service.spreadsheets()
+        .values()
+        .get(spreadsheetId=sheet_id, range=_sheet_range(f"P{row_num}"))
+        .execute()
+    )
+    values = result.get("values", [])
+    return bool(values and values[0] and str(values[0][0]).strip().lower() == "yes")
+
+
+def backfill_documents_status(sheet_id, row_num, has_documents, view_url, add_url):
+    """Writes column P's (Documents) status link -- "Yes" (linked to
+    the case page) once at least one document has been scanned for the
+    case, otherwise "NO DOCUMENTS" (linked straight to the scan app's
+    Scan Document panel for this case). Mirrors
+    backfill_inventory_status -- see that for why this always writes
+    an explicit value rather than ever leaving the cell blank."""
     _ensure_grid_width(sheet_id, 20)
     service = _get_service()
+    if has_documents:
+        formula = f'=HYPERLINK("{view_url}", "Yes")'
+    else:
+        formula = f'=HYPERLINK("{add_url}", "NO DOCUMENTS")'
     service.spreadsheets().values().update(
         spreadsheetId=sheet_id,
         range=_sheet_range(f"P{row_num}"),
         valueInputOption="USER_ENTERED",
-        body={"values": [[summary]]},
+        body={"values": [[formula]]},
+    ).execute()
+
+
+def backfill_storage_days(sheet_id, row_num, start_date, end_date=None):
+    """Writes column R (Days in Storage -- billable time in our care).
+    start_date/end_date are datetime.date (or datetime) objects.
+
+    While still in storage (end_date is None), writes a live formula
+    -- =TODAY()-DATE(y,m,d) -- so it keeps counting up on its own every
+    day the sheet is opened, no daily job needed on our end. Once
+    released or cremated (end_date given), writes a fixed number
+    instead so the count freezes there even if the sheet is reopened
+    weeks later -- billing has already stopped by then. Checkout/
+    check-in never call this -- the clock only starts at intake and
+    stops at release/cremation, matching how billing actually works,
+    so a temporary checkout doesn't pause or reset it."""
+    _ensure_grid_width(sheet_id, 20)
+    service = _get_service()
+    start = start_date.date() if hasattr(start_date, "date") else start_date
+    if end_date is None:
+        # DATEDIF (not plain subtraction) so the cell reliably holds a
+        # plain integer -- subtracting two dates directly sometimes gets
+        # auto-formatted by Sheets as a date/duration instead of a number.
+        value = f'=DATEDIF(DATE({start.year},{start.month},{start.day}), TODAY(), "D")'
+    else:
+        end = end_date.date() if hasattr(end_date, "date") else end_date
+        value = (end - start).days
+    service.spreadsheets().values().update(
+        spreadsheetId=sheet_id,
+        range=_sheet_range(f"R{row_num}"),
+        valueInputOption="USER_ENTERED",
+        body={"values": [[value]]},
     ).execute()

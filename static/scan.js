@@ -1755,15 +1755,15 @@ resetFlow();
 // jumps straight into this case's Inventory panel, skipping the home
 // screen and a QR scan entirely, so a click from the sheet lands
 // directly on "add a photo/description" for that exact case.
-(function openInventoryDeepLink() {
+(function openPanelDeepLink() {
   const params = new URLSearchParams(window.location.search);
-  if (params.get("open") !== "inventory") return;
+  const openMode = params.get("open");
   const code = params.get("case");
-  if (!code) return;
-  mode = "inventory";
+  if (!code || (openMode !== "inventory" && openMode !== "documents")) return;
+  mode = openMode;
   homeScreen.classList.add("hidden");
   scanPanel.classList.remove("hidden");
-  stepLabel.textContent = "Loading inventory...";
+  stepLabel.textContent = openMode === "inventory" ? "Loading inventory..." : "Loading documents...";
   handleCaseScan(`${window.location.origin}/case/${encodeURIComponent(code)}`).catch((err) =>
     showStatus(err.message, false)
   );

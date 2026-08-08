@@ -504,6 +504,16 @@ def _inventory_status_urls(base_url, case_code):
     return view_url, add_url
 
 
+def _documents_status_urls(base_url, case_code):
+    """The two links column P's (Documents) status can point to (see
+    backfill_documents_status) -- same pattern as
+    _inventory_status_urls, just pointing the "add" link at the scan
+    app's Documents panel (?open=documents) instead of Inventory's."""
+    view_url = f"{base_url}/case/{quote(case_code, safe='')}"
+    add_url = f"{base_url}/scan?open=documents&case={quote(case_code, safe='')}"
+    return view_url, add_url
+
+
 def parse_date_from_sheet(sheet_date):
     """Best-effort inverse of format_date_for_sheet -- staff typing a
     date straight into the sheet (see the manual-entry sync) might write
@@ -1271,27 +1281,30 @@ def admin_delete_disposition(option_id):
 @app.route("/admin/repair-inventory-column", methods=["POST"])
 @admin_required
 def admin_repair_inventory_column():
-    """One-off cleanup for column O (the sheet's real INVENTORY column)
-    rows that got corrupted before this was fixed to always write an
-    explicit "Yes"/"NO PROPERTY" (see backfill_inventory_status) --
+    """One-off cleanup for columns O (INVENTORY), P (Documents), and R
+    (Days in Storage). O/P: rows that got corrupted before this was
+    fixed to always write an explicit "Yes"/"NO PROPERTY"/"NO DOCUMENTS"
+    (see backfill_inventory_status/backfill_documents_status) --
     previously a blank cell under an already-"Yes" one could get
     overwritten by Google Sheets' own "fill down" suggestion, copying
     one case's Yes link onto unrelated rows. This also fixes an earlier
-    version of the app that wrote this status into column Q by mistake
-    (that's actually a free-text Notes column) -- running this moves
-    things to the right column going forward, though any old incorrect
-    values already sitting in Q are left alone rather than auto-deleted,
-    in case Q also has real staff notes mixed in. Re-derives the correct
-    value for every tracked case from its actual local inventory count
-    and rewrites O to match, using whichever sheet each case actually
-    lives on (a case keeps its own sheet_id even after the current month
-    rolls over)."""
+    version of the app that wrote inventory status into column Q by
+    mistake (that's actually a free-text Notes column) -- running this
+    moves things to the right column going forward, though any old
+    incorrect values already sitting in Q are left alone rather than
+    auto-deleted, in case Q also has real staff notes mixed in. R:
+    backfills the running/frozen day count for any case that predates
+    the Days in Storage feature, or whose count otherwise got out of
+    sync. Re-derives the correct value for every tracked case from its
+    actual local data and rewrites O, P, and R to match, using whichever
+    sheet each case actually lives on (a case keeps its own sheet_id
+    even after the current month rolls over)."""
     if not config.GOOGLE_SHEETS_ENABLED:
         return jsonify(error="Google Sheets isn't turned on yet (see config.py)"), 400
 
     db = get_db()
     cases = db.execute(
-        "SELECT id, case_code, sheet_id FROM cases WHERE sheet_id IS NOT NULL"
+        "SELECT id, case_code, sheet_id, created_at, status, released_at FROM cases WHERE sheet_id IS NOT NULL"
     ).fetchall()
 
     base_url = request.host_url.rstrip("/")
@@ -1309,6 +1322,18 @@ def admin_repair_inventory_column():
             ).fetchone() is not None
             view_url, add_url = _inventory_status_urls(base_url, case["case_code"])
             _sheets().backfill_inventory_status(case["sheet_id"], sheet_row, has_inventory, view_url, add_url)
+
+            has_documents = db.execute(
+                "SELECT 1 FROM case_documents WHERE case_id = ?", (case["id"],)
+            ).fetchone() is not None
+            doc_view_url, doc_add_url = _documents_status_urls(base_url, case["case_code"])
+            _sheets().backfill_documents_status(case["sheet_id"], sheet_row, has_documents, doc_view_url, doc_add_url)
+
+            created_at = datetime.strptime(case["created_at"], "%Y-%m-%d %H:%M:%S")
+            ended_at = None
+            if case["status"] == "released" and case["released_at"]:
+                ended_at = datetime.strptime(case["released_at"], "%Y-%m-%d %H:%M:%S")
+            _sheets().backfill_storage_days(case["sheet_id"], sheet_row, created_at, ended_at)
             fixed += 1
         except Exception as e:
             errors.append(f"{case['case_code']}: {e}")
@@ -1498,13 +1523,14 @@ def run_sheet_sync(db, base_url):
             continue
 
         pickup_date = parse_date_from_sheet(date_str)
+        created_at = now()
         db.execute(
             """INSERT INTO cases
                (case_code, name, funeral_home, pickup_date, status, created_at, sheet_id,
                 time_received, removal_type, disposition, removal_by, night)
                VALUES (?, ?, ?, ?, 'pending_location', ?, ?, ?, ?, ?, ?, ?)""",
             (
-                case_code, name or None, funeral_home or None, pickup_date, now(), sid,
+                case_code, name or None, funeral_home or None, pickup_date, created_at, sid,
                 time_received or None, removal_type or None, disposition or None,
                 removal_by or None, night or None,
             ),
@@ -1522,6 +1548,17 @@ def run_sheet_sync(db, base_url):
         try:
             view_url, add_url = _inventory_status_urls(base_url, case_code)
             _sheets().backfill_inventory_status(sid, row_num, False, view_url, add_url)
+        except Exception:
+            pass  # not worth failing the whole sync over -- the admin repair action covers stragglers
+
+        try:
+            doc_view_url, doc_add_url = _documents_status_urls(base_url, case_code)
+            _sheets().backfill_documents_status(sid, row_num, False, doc_view_url, doc_add_url)
+        except Exception:
+            pass  # not worth failing the whole sync over -- the admin repair action covers stragglers
+
+        try:
+            _sheets().backfill_storage_days(sid, row_num, datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S"))
         except Exception:
             pass  # not worth failing the whole sync over -- the admin repair action covers stragglers
 
@@ -1594,6 +1631,7 @@ def case_detail_page(case_code):
     history = get_case_history(db, row["id"]) if row is not None else []
     flags = get_case_flags(db, row["id"]) if row is not None else {}
     inventory = get_inventory_items(db, row["id"]) if row is not None else []
+    documents = get_case_documents(db, row["id"]) if row is not None else []
     return render_template(
         "case_detail.html",
         case=row,
@@ -1606,6 +1644,7 @@ def case_detail_page(case_code):
         history=history,
         flags=flags,
         inventory=inventory,
+        documents=documents,
     )
 
 
@@ -1802,7 +1841,7 @@ def api_add_document(case_code):
     multi-capture-friendly shape as api_add_inventory -- each photo in a
     batch is its own call with its own captured_at."""
     db = get_db()
-    case = db.execute("SELECT id, name FROM cases WHERE case_code = ?", (case_code,)).fetchone()
+    case = db.execute("SELECT id, name, sheet_id FROM cases WHERE case_code = ?", (case_code,)).fetchone()
     if case is None:
         return jsonify(error="Unknown case code"), 404
 
@@ -1833,7 +1872,24 @@ def api_add_document(case_code):
     )
     db.commit()
 
-    return jsonify(ok=True, items=get_case_documents(db, case["id"]))
+    sheet_warning = None
+    if config.GOOGLE_SHEETS_ENABLED:
+        try:
+            sid = case_sheet_id(db, case)
+            sheet_row = _sheets().find_row_for_case(sid, case_code)
+            if sheet_row and not _sheets().row_has_documents_flag(sid, sheet_row):
+                view_url, add_url = _documents_status_urls(request.host_url.rstrip("/"), case_code)
+                _sheets().backfill_documents_status(sid, sheet_row, True, view_url, add_url)
+        except Exception as e:
+            # First document already saved locally either way -- a
+            # sheet write hiccup here shouldn't block staff from
+            # continuing to scan more pages.
+            sheet_warning = f"Saved locally, but sheet write failed: {e}"
+
+    resp = dict(ok=True, items=get_case_documents(db, case["id"]))
+    if sheet_warning:
+        resp["sheet_warning"] = sheet_warning
+    return jsonify(**resp)
 
 
 @app.route("/api/documents/<int:doc_id>/delete", methods=["POST"])
@@ -2584,6 +2640,11 @@ def api_release():
                 else:
                     _sheets().backfill_released_to(sid, sheet_row, released_to)
                 _sheets().set_case_link_dead(sid, sheet_row)
+                # Freeze column R (Days in Storage) as of right now --
+                # billing stops the day of release/cremation, so this
+                # should never keep counting up after this point.
+                created_at = datetime.strptime(case["created_at"], "%Y-%m-%d %H:%M:%S")
+                _sheets().backfill_storage_days(sid, sheet_row, created_at, datetime.now())
         except Exception as e:
             sheet_warning = f"Released locally, but sheet write failed: {e}"
 
@@ -2635,11 +2696,7 @@ def api_checkout():
             sid = case_sheet_id(db, case)
             sheet_row = _sheets().find_row_for_case(sid, case_code)
             if sheet_row:
-                summary = f"Checked out to {org}"
-                if reason:
-                    summary += f" ({reason})"
-                summary += f" since {format_date_for_sheet(checked_out_at.split(' ')[0])}"
-                _sheets().backfill_checkout(sid, sheet_row, summary)
+                _sheets().set_case_checked_out_color(sid, sheet_row, True)
         except Exception as e:
             sheet_warning = f"Checked out locally, but sheet write failed: {e}"
 
@@ -2682,7 +2739,7 @@ def api_checkin():
             sid = case_sheet_id(db, case)
             sheet_row = _sheets().find_row_for_case(sid, case_code)
             if sheet_row:
-                _sheets().backfill_checkout(sid, sheet_row, "")
+                _sheets().set_case_checked_out_color(sid, sheet_row, False)
         except Exception as e:
             sheet_warning = f"Checked in locally, but sheet write failed: {e}"
 
@@ -2843,6 +2900,16 @@ def api_sheet_intake_save():
                 ).fetchone() is not None
                 view_url, add_url = _inventory_status_urls(request.host_url.rstrip("/"), case_code)
                 _sheets().backfill_inventory_status(sid, sheet_row, has_inventory, view_url, add_url)
+                # Same idea for column P (Documents).
+                has_documents = db.execute(
+                    "SELECT 1 FROM case_documents WHERE case_id = ?", (row["id"],)
+                ).fetchone() is not None
+                doc_view_url, doc_add_url = _documents_status_urls(request.host_url.rstrip("/"), case_code)
+                _sheets().backfill_documents_status(sid, sheet_row, has_documents, doc_view_url, doc_add_url)
+                # Column R (Days in Storage) starts counting from when
+                # this case was first created -- see backfill_storage_days.
+                created_at = datetime.strptime(row["created_at"], "%Y-%m-%d %H:%M:%S")
+                _sheets().backfill_storage_days(sid, sheet_row, created_at)
         except Exception as e:
             # Local save already succeeded -- don't fail the whole request
             # over a sheet write hiccup, just tell the caller it happened.

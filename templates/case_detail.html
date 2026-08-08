@@ -106,6 +106,27 @@
       </div>
     {% endif %}
 
+    {% if documents %}
+      <div class="info-form" style="display:block; margin-top:16px;">
+        <h3 style="margin-top:0;">Documents</h3>
+        <div class="inventory-list">
+          {% for doc in documents %}
+            <div class="inventory-row">
+              <img class="inventory-thumb" src="{{ url_for('document_photo', doc_id=doc.id) }}" alt=""
+                   onclick="openPhotoLightbox(this.src)">
+              <div class="inventory-info">
+                <div>{{ doc.doc_type or "(untitled document)" }}</div>
+                <div class="history-when">{{ doc.when }}{% if doc.staff %} — {{ doc.staff }}{% endif %}</div>
+              </div>
+              <a href="{{ url_for('print_single_document_page', doc_id=doc.id) }}" target="_blank" rel="noopener"
+                 style="text-align:center; text-decoration:none; padding:8px 12px; background:#263447; color:#cdd; border-radius:6px; font-size:14px; white-space:nowrap;">🖨️ Print</a>
+            </div>
+          {% endfor %}
+        </div>
+        <a class="secondary-btn" href="{{ url_for('case_print_documents_page', case_code=case_code) }}" target="_blank" rel="noopener" style="display:block; text-decoration:none; text-align:center; margin-top:14px;">🖨️ Print All Documents (Office Printer)</a>
+      </div>
+    {% endif %}
+
     {% if history %}
       <div class="info-form" style="display:block; margin-top:16px;">
         <h3 style="margin-top:0;">History</h3>

@@ -44,17 +44,18 @@
   </div>
 
   <div class="info-form">
-    <h3 style="margin-top:0;">Repair Inventory Column (O)</h3>
+    <h3 style="margin-top:0;">Repair Columns O, P &amp; R</h3>
     <p style="color:#aab; font-size:14px; margin-top:0;">
-      Fixes rows where column O (INVENTORY) ended up with the wrong "Yes" link (e.g. from Google
-      Sheets' own "fill down" suggestion copying one row's link onto others below it) -- or that
-      never got written there at all yet. Re-checks every case against its actual local inventory
-      and rewrites O to the correct Yes / NO PROPERTY link. Safe to run any time -- can take a
-      little while if there are a lot of cases. Note: this does not touch column Q (Notes) -- if
-      an earlier version of the app left incorrect "Yes" values there, those need clearing by hand
+      Fixes rows where column O (INVENTORY) or P (Documents) ended up with the wrong "Yes" link
+      (e.g. from Google Sheets' own "fill down" suggestion copying one row's link onto others
+      below it) -- or that never got written there at all yet. Also backfills column R (Days in
+      Storage) for any case that predates that feature. Re-checks every case against its actual
+      local data and rewrites O, P, and R to match. Safe to run any time -- can take a little
+      while if there are a lot of cases. Note: this does not touch column Q (Notes) -- if an
+      earlier version of the app left incorrect "Yes" values there, those need clearing by hand
       since Q also holds real staff notes.
     </p>
-    <button id="repairInventoryBtn" class="primary-btn">Repair Column O</button>
+    <button id="repairInventoryBtn" class="primary-btn">Repair Columns O, P &amp; R</button>
     <div id="repairInventoryStatus" class="status-msg"></div>
   </div>
 
