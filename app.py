@@ -31,6 +31,14 @@ import config
 
 app = Flask(__name__)
 DB_PATH = "cooler.db"
+
+# In-memory only (not persisted -- resets on restart, which is fine): the
+# last time each case_code was scanned anywhere (any mode, any device).
+# Lets the Cooler Board's detail popup auto-close itself once someone
+# actually scans the tag it's showing (see api_case_scan_timestamp), e.g.
+# a shared-screen board display showing a QR code that a staff member
+# then scans with their own phone.
+_last_scan_times = {}
 INVENTORY_PHOTOS_PATH = Path(config.INVENTORY_PHOTOS_DIR)
 INVENTORY_PHOTOS_PATH.mkdir(exist_ok=True)
 CASE_DOCUMENTS_PATH = Path(config.CASE_DOCUMENTS_DIR)
@@ -484,7 +492,7 @@ def format_time_for_sheet(hhmm):
 
 
 def _inventory_status_urls(base_url, case_code):
-    """The two links column Q's inventory status can point to (see
+    """The two links column O's (INVENTORY) status can point to (see
     backfill_inventory_status): the case page (once inventory exists) or
     straight into the scan app's Inventory panel for this case (when it
     doesn't yet, via the ?open=inventory deep link -- see scan.js). Built
@@ -1263,15 +1271,21 @@ def admin_delete_disposition(option_id):
 @app.route("/admin/repair-inventory-column", methods=["POST"])
 @admin_required
 def admin_repair_inventory_column():
-    """One-off cleanup for column Q rows that got corrupted before this
-    was fixed to always write an explicit "Yes"/"NO PROPERTY" (see
-    backfill_inventory_status) -- previously a blank Q cell under an
-    already-"Yes" one could get overwritten by Google Sheets' own "fill
-    down" suggestion, copying one case's Yes link onto unrelated rows.
-    Re-derives the correct value for every tracked case from its actual
-    local inventory count and rewrites Q to match, using whichever sheet
-    each case actually lives on (a case keeps its own sheet_id even
-    after the current month rolls over)."""
+    """One-off cleanup for column O (the sheet's real INVENTORY column)
+    rows that got corrupted before this was fixed to always write an
+    explicit "Yes"/"NO PROPERTY" (see backfill_inventory_status) --
+    previously a blank cell under an already-"Yes" one could get
+    overwritten by Google Sheets' own "fill down" suggestion, copying
+    one case's Yes link onto unrelated rows. This also fixes an earlier
+    version of the app that wrote this status into column Q by mistake
+    (that's actually a free-text Notes column) -- running this moves
+    things to the right column going forward, though any old incorrect
+    values already sitting in Q are left alone rather than auto-deleted,
+    in case Q also has real staff notes mixed in. Re-derives the correct
+    value for every tracked case from its actual local inventory count
+    and rewrites O to match, using whichever sheet each case actually
+    lives on (a case keeps its own sheet_id even after the current month
+    rolls over)."""
     if not config.GOOGLE_SHEETS_ENABLED:
         return jsonify(error="Google Sheets isn't turned on yet (see config.py)"), 400
 
@@ -2041,6 +2055,17 @@ def api_location_lookup(location_code):
     )
 
 
+@app.route("/api/case/<case_code>/scan-timestamp")
+@login_required
+def api_case_scan_timestamp(case_code):
+    """When this case was last scanned anywhere (see _last_scan_times) --
+    the Cooler Board's detail popup polls this while open so a shared-
+    screen display can close itself the moment someone actually scans
+    the tag it's showing (e.g. with their own phone), instead of sitting
+    open until someone remembers to close it by hand."""
+    return jsonify(last_scanned=_last_scan_times.get(case_code))
+
+
 @app.route("/api/cases/search")
 @login_required
 def api_cases_search():
@@ -2212,6 +2237,8 @@ def api_case_lookup():
     if err:
         message, status = err
         return jsonify(error=message), status
+
+    _last_scan_times[case_code] = time.time()
 
     row = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
     if row is None:
@@ -2714,10 +2741,11 @@ def api_sheet_intake_save():
                         "case_detail_page", case_code=case_code
                     )
                     _sheets().backfill_case_link(sid, sheet_row, target_url)
-                # Initialize column Q explicitly (NO PROPERTY, not blank)
-                # as soon as the row exists -- see backfill_inventory_status
-                # for why leaving it blank is what causes Sheets to offer
-                # to "fill down" a neighboring row's Yes link into it.
+                # Initialize column O (INVENTORY) explicitly (NO PROPERTY,
+                # not blank) as soon as the row exists -- see
+                # backfill_inventory_status for why leaving it blank is
+                # what causes Sheets to offer to "fill down" a neighboring
+                # row's Yes link into it.
                 has_inventory = db.execute(
                     "SELECT 1 FROM inventory_items WHERE case_id = ?", (row["id"],)
                 ).fetchone() is not None

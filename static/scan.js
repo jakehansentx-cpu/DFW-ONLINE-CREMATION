@@ -1385,6 +1385,11 @@ async function startInventoryCamera() {
     inventoryStatus.className = "status-msg err";
     return;
   }
+  if (!audioCtx && (window.AudioContext || window.webkitAudioContext)) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+
   inventoryCameraVideo.srcObject = inventoryCameraStream;
   inventoryCameraVideo.muted = true;
   await inventoryCameraVideo.play();
@@ -1403,6 +1408,7 @@ function stopInventoryCamera() {
 
 function captureInventoryPhoto() {
   if (!inventoryCameraStream) return;
+  playBeep();
   const ctx = inventoryCameraCanvas.getContext("2d");
   inventoryCameraCanvas.width = inventoryCameraVideo.videoWidth;
   inventoryCameraCanvas.height = inventoryCameraVideo.videoHeight;
@@ -1585,6 +1591,11 @@ async function startDocumentsCamera() {
     documentsStatus.className = "status-msg err";
     return;
   }
+  if (!audioCtx && (window.AudioContext || window.webkitAudioContext)) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+
   documentsCameraVideo.srcObject = documentsCameraStream;
   documentsCameraVideo.muted = true;
   await documentsCameraVideo.play();
@@ -1603,6 +1614,7 @@ function stopDocumentsCamera() {
 
 function captureDocumentsPhoto() {
   if (!documentsCameraStream) return;
+  playBeep();
   const ctx = documentsCameraCanvas.getContext("2d");
   documentsCameraCanvas.width = documentsCameraVideo.videoWidth;
   documentsCameraCanvas.height = documentsCameraVideo.videoHeight;
@@ -1838,9 +1850,14 @@ cameraStopBtn.addEventListener("click", stopCamera);
 
 // Synthesized beep (Web Audio API) instead of an audio file -- keeps this
 // fully local/offline like everything else here, and it's just a couple
-// lines either way. Browsers only allow audio to start from a real user
-// gesture, so the AudioContext gets created/resumed inside startCamera()
-// (a click handler), not lazily on the first scan.
+// lines either way. Also doubles as the shutter sound for inventory/
+// document photo captures (see captureInventoryPhoto/captureDocumentsPhoto)
+// so staff get the same audible confirmation there as scanning a code,
+// instead of tapping repeatedly unsure whether a photo was taken.
+// Browsers only allow audio to start from a real user gesture, so the
+// AudioContext gets created/resumed inside each camera's start function
+// (startCamera/startInventoryCamera/startDocumentsCamera -- all click
+// handlers), not lazily on first use.
 let audioCtx = null;
 function playBeep() {
   try {

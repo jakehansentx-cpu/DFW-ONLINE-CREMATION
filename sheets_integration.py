@@ -27,15 +27,17 @@ Column layout (matches your sheet):
         armband tag itself still has a real, scannable QR code either
         way -- this column is just a convenience shortcut from the
         sheet.
-    O = released to -- who/where the decedent was released to
+    O = INVENTORY (the sheet's real header) -- "NO PROPERTY" (linked to
+        the scan app's Inventory panel for the case) until the first
+        inventory item (photo and/or description) is logged, then "Yes"
+        (linked to the case page instead). Always one or the other,
+        never blank -- see backfill_inventory_status(). NOT released-to
+        (M's "Released to <X>" already covers that) and NOT column Q.
     P = checkout status -- filled in while a decedent is temporarily
         checked out (autopsy, organ/tissue donation, etc.), cleared
         back to blank once checked back in
-    Q = has inventory -- "NO PROPERTY" (linked to the scan app's
-        Inventory panel for the case) until the first inventory item
-        (photo and/or description) is logged, then "Yes" (linked to the
-        case page instead). Always one or the other, never blank -- see
-        backfill_inventory_status()
+    Q = Notes -- free text for staff's own use. The app never writes
+        here.
 
 "Next available case number" = the first row, scanning top to bottom,
 where column A has a value but B, D, and E are all still empty. That's
@@ -400,16 +402,17 @@ def set_case_link_dead(sheet_id, row_num):
 
 
 def row_has_inventory_flag(sheet_id, row_num):
-    """True only if column Q is already showing "Yes" for this row --
-    lets the caller skip re-writing it on every subsequent inventory
-    item. A "NO PROPERTY" cell (see backfill_inventory_status) does NOT
-    count as already flagged -- that still needs to flip to "Yes" the
-    first time an item actually gets added."""
+    """True only if column O (the sheet's real INVENTORY column) is
+    already showing "Yes" for this row -- lets the caller skip
+    re-writing it on every subsequent inventory item. A "NO PROPERTY"
+    cell (see backfill_inventory_status) does NOT count as already
+    flagged -- that still needs to flip to "Yes" the first time an item
+    actually gets added."""
     service = _get_service()
     result = (
         service.spreadsheets()
         .values()
-        .get(spreadsheetId=sheet_id, range=_sheet_range(f"Q{row_num}"))
+        .get(spreadsheetId=sheet_id, range=_sheet_range(f"O{row_num}"))
         .execute()
     )
     values = result.get("values", [])
@@ -417,9 +420,11 @@ def row_has_inventory_flag(sheet_id, row_num):
 
 
 def backfill_inventory_status(sheet_id, row_num, has_inventory, view_url, add_url):
-    """Writes column Q's inventory-status link -- "Yes" (linked to the
-    case page) once at least one inventory item has been logged for the
-    case, otherwise "NO PROPERTY" (linked straight to the scan app's
+    """Writes column O's (the sheet's real INVENTORY column -- NOT Q,
+    which is a free-text Notes column staff use for their own
+    purposes) inventory-status link: "Yes" (linked to the case page)
+    once at least one inventory item has been logged for the case,
+    otherwise "NO PROPERTY" (linked straight to the scan app's
     Inventory panel for this case, so staff can add one directly from
     the sheet). Always writes an explicit value rather than leaving the
     cell blank while inventory is empty -- a blank cell sitting under an
@@ -435,7 +440,7 @@ def backfill_inventory_status(sheet_id, row_num, has_inventory, view_url, add_ur
         formula = f'=HYPERLINK("{add_url}", "NO PROPERTY")'
     service.spreadsheets().values().update(
         spreadsheetId=sheet_id,
-        range=_sheet_range(f"Q{row_num}"),
+        range=_sheet_range(f"O{row_num}"),
         valueInputOption="USER_ENTERED",
         body={"values": [[formula]]},
     ).execute()
@@ -460,19 +465,18 @@ def backfill_cremation(sheet_id, row_num, timestamp_str, disk_number=None):
 
 
 def backfill_released_to(sheet_id, row_num, released_to):
-    """Writes who/where a decedent was released to into column O, and
-    the same info into column M (Final Disposition) -- a normal release
-    is itself a final disposition, same as a cremation is."""
+    """Writes who/where a decedent was released to into column M (Final
+    Disposition, as "Released to <X>") -- a normal release is itself a
+    final disposition, same as a cremation is. Used to also duplicate
+    this into column O, but that's the real sheet's INVENTORY column
+    (see backfill_inventory_status), not a spare -- M alone already
+    captures who it was released to in readable form."""
     service = _get_service()
-    body = {
-        "valueInputOption": "USER_ENTERED",
-        "data": [
-            {"range": _sheet_range(f"M{row_num}"), "values": [[f"Released to {released_to}"]]},
-            {"range": _sheet_range(f"O{row_num}"), "values": [[released_to]]},
-        ],
-    }
-    service.spreadsheets().values().batchUpdate(
-        spreadsheetId=sheet_id, body=body
+    service.spreadsheets().values().update(
+        spreadsheetId=sheet_id,
+        range=_sheet_range(f"M{row_num}"),
+        valueInputOption="USER_ENTERED",
+        body={"values": [[f"Released to {released_to}"]]},
     ).execute()
 
 

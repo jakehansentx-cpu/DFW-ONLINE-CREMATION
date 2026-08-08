@@ -499,7 +499,50 @@ function renderBoard(rows) {
   });
 }
 
+// Auto-closes the detail popup once someone actually scans the tag it's
+// showing -- useful when this board is up on a shared screen and a
+// staff member scans the on-screen QR with their own phone instead of
+// the physical tag: without this, the popup would just sit there open
+// until someone remembers to close it by hand.
+let detailPollInterval = null;
+
+function stopDetailScanPoll() {
+  if (detailPollInterval) {
+    clearInterval(detailPollInterval);
+    detailPollInterval = null;
+  }
+}
+
+async function fetchScanTimestamp(code) {
+  try {
+    const res = await fetch(`/api/case/${encodeURIComponent(code)}/scan-timestamp`);
+    const data = await res.json();
+    return data.last_scanned || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function startDetailScanPoll(caseCodes) {
+  if (caseCodes.length === 0) return;
+  const baseline = {};
+  await Promise.all(caseCodes.map(async (code) => { baseline[code] = await fetchScanTimestamp(code); }));
+
+  detailPollInterval = setInterval(async () => {
+    for (const code of caseCodes) {
+      const latest = await fetchScanTimestamp(code);
+      if (latest && latest !== baseline[code]) {
+        stopDetailScanPoll();
+        document.getElementById("detail").classList.add("hidden");
+        poll();
+        return;
+      }
+    }
+  }, 2000);
+}
+
 function showDetail(loc, coolerName, shelfNum) {
+  stopDetailScanPoll();
   const overlay = document.getElementById("detail");
   const content = document.getElementById("detailContent");
   const where = `${coolerName} — Shelf ${shelfNum}${loc.slot ? loc.slot : ""}`;
@@ -880,6 +923,7 @@ function showDetail(loc, coolerName, shelfNum) {
     });
   }
   overlay.classList.remove("hidden");
+  startDetailScanPoll(loc.occupants.map((o) => o.case_code));
 }
 
 function occupantNameFor(caseCode, loc) {
@@ -887,6 +931,7 @@ function occupantNameFor(caseCode, loc) {
   return (o && o.name) || caseCode;
 }
 document.getElementById("closeDetail").addEventListener("click", () => {
+  stopDetailScanPoll();
   document.getElementById("detail").classList.add("hidden");
 });
 
