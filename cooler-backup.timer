@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Cooler Tracking Whiteboard backup every 4 hours
+
+[Timer]
+OnCalendar=00/4:00
+# If the Pi was off/rebooting right when a run was due, do it as soon
+# as it's back up instead of waiting for the next scheduled time.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

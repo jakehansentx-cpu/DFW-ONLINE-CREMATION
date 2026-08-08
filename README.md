@@ -361,6 +361,96 @@ anyone having to open a terminal:
 startup" pointed at `python app.py` does the same job. Say the word if
 that's your setup and I'll write the exact steps.)
 
+## Automated backups
+
+The case database and inventory/document photos live only on this
+machine's own drive (the Google Sheet is a separate, already-cloud-hosted
+copy). `backup.py` takes a full snapshot of both — plus an offline
+`.xlsx` export of every monthly Sheet this app has ever used — onto a
+separate external drive, on a schedule, with no one needing to remember
+to run anything.
+
+**What it backs up, every 4 hours by default:** the database
+(`cooler.db`), the `inventory_photos/` and `case_documents/` folders,
+and a `.xlsx` copy of each Google Sheet. Each run is its own dated
+folder (e.g. `2026-08-08_1600/`) on the backup drive, so you can always
+find a copy from a specific point in time. Backups older than 7 days
+get deleted automatically; independent of that, if the drive is ever
+close to full, the *oldest* backup gets deleted first to make room —
+like a ring buffer, never just failing silently.
+
+**One-time setup (do this once, in order):**
+
+1. **Get a drive.** A small USB 3.0 SSD (128GB–256GB, e.g. a Samsung
+   T7, Crucial X6, or similar — roughly $30–40) is a good pick. That's
+   far more capacity than this ever needs; the point is durability —
+   an SSD handles years of repeated automated writes much better than
+   a cheap flash drive. Plug it into the Pi.
+
+2. **Find the drive and format it** (skip formatting if it already has
+   data you want to keep, but then adjust the mount instructions for
+   its existing filesystem type):
+   ```
+   lsblk
+   ```
+   Look for the new drive (by its size) — it'll show up as something
+   like `sda` with a partition `sda1`. **Double-check you have the
+   right device before continuing — the next command erases it
+   completely:**
+   ```
+   sudo mkfs.ext4 -L coolerbackup /dev/sda1
+   ```
+
+3. **Create a mount point and get the drive's UUID:**
+   ```
+   sudo mkdir -p /mnt/cooler-backup
+   sudo blkid /dev/sda1
+   ```
+   Copy the `UUID="...”` value it prints.
+
+4. **Add it to `/etc/fstab`** so it mounts automatically on every boot
+   (`sudo nano /etc/fstab`, add this as a new line, using the UUID you
+   just copied):
+   ```
+   UUID=paste-your-uuid-here  /mnt/cooler-backup  ext4  defaults,nofail  0  2
+   ```
+   (`nofail` is important — it means the Pi still boots normally even
+   if the drive is ever unplugged.)
+
+5. **Mount it now and set permissions** (replace `pi` with your actual
+   login user if different):
+   ```
+   sudo mount -a
+   sudo chown pi:pi /mnt/cooler-backup
+   ```
+
+6. **Install the backup timer**, same pattern as the app's own
+   auto-start service above:
+   ```
+   nano cooler-backup.service   # set WorkingDirectory/ExecStart/User to match cooler-board.service
+   chmod +x install_backup.sh
+   ./install_backup.sh
+   ```
+
+That's it — backups now run automatically every 4 hours, with no one
+needing to do anything. Useful commands afterward:
+
+- Run one right now: `sudo systemctl start cooler-backup.service`
+- See when the next one is scheduled: `systemctl list-timers cooler-backup.timer`
+- Read the backup log: `cat /mnt/cooler-backup/backup.log`
+- Change how often it runs: edit the `OnCalendar=` line in
+  `cooler-backup.timer`, then `sudo cp cooler-backup.timer
+  /etc/systemd/system/ && sudo systemctl daemon-reload && sudo
+  systemctl restart cooler-backup.timer`
+
+**To restore from a backup:** stop the app
+(`sudo systemctl stop cooler-board`), copy the `cooler.db` and photo
+folders from whichever dated snapshot folder you want back into
+`cooler_board/` (overwriting the current ones), then start it again
+(`sudo systemctl start cooler-board`). For a Sheet, just re-upload its
+`.xlsx` file to Google Sheets (File → Import → Replace spreadsheet) or
+open it directly in Excel/LibreOffice.
+
 ## Concurrent scan stations
 
 Right now the server processes one request at a time on purpose

@@ -96,6 +96,22 @@ PUBLIC_HOST = "https://metro-body-storage.tail8ed927.ts.net"
 # to press it.
 SHEET_SYNC_INTERVAL_MINUTES = 5
 
+# Where backup.py writes its snapshots -- an external drive mounted at
+# this path (see README's backup setup section). backup.py refuses to
+# write here if this isn't an actual separate filesystem mount point
+# (os.path.ismount), so a drive that's unplugged/failed to mount can
+# never cause backups to silently land back on the Pi's own SD card
+# instead.
+BACKUP_MOUNT_DIR = "/mnt/cooler-backup"
+
+# Backups older than this get deleted on each run. Independent of this,
+# backup.py also deletes the OLDEST backup(s) first (regardless of age)
+# whenever the drive's free space drops below BACKUP_MIN_FREE_MB, so a
+# full drive never just fails silently -- it makes room by discarding
+# the oldest snapshot(s) first.
+BACKUP_RETENTION_DAYS = 7
+BACKUP_MIN_FREE_MB = 1024
+
 # A blank field tag (see gen_field_tags.py) claims a real case number the
 # moment it's scanned -- but claiming never writes anything back to the
 # sheet itself, so if that claim is then never actually used (no name,

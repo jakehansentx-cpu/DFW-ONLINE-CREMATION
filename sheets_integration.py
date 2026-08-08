@@ -74,13 +74,14 @@ from googleapiclient.discovery import build
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
-    # Read-only Drive metadata -- just enough to notice a new monthly
-    # sheet has been shared with the service account (see
-    # find_shared_sheet_by_name() below) without granting any ability to
-    # read file *contents* via Drive itself or touch anything not shared
-    # with it. Requires the Drive API to be enabled on the same Google
-    # Cloud project as the Sheets API (see README).
-    "https://www.googleapis.com/auth/drive.metadata.readonly",
+    # Read-only Drive access (content, not just metadata) -- lets the
+    # service account notice a new monthly sheet shared with it (see
+    # find_shared_sheet_by_name() below) AND export a sheet's actual
+    # content as a file (see backup.py's sheet export), still without
+    # ever granting any ability to edit or delete anything in Drive.
+    # Requires the Drive API to be enabled on the same Google Cloud
+    # project as the Sheets API (see README).
+    "https://www.googleapis.com/auth/drive.readonly",
 ]
 
 # Matches the spreadsheet ID out of any Google Sheets URL shape
@@ -158,6 +159,31 @@ def find_shared_sheet_by_name(name):
     )
     files = result.get("files", [])
     return files[0]["id"] if files else None
+
+
+def export_sheet_xlsx(sheet_id):
+    """Downloads a full .xlsx snapshot of a spreadsheet's current
+    content -- used by backup.py to keep an offline copy of every
+    monthly call log on the backup drive, independent of Google Drive
+    itself (protects against an accidental delete/corruption there,
+    on top of Drive's own 30-day Trash + Version History)."""
+    service = _get_drive_service()
+    return service.files().export(
+        fileId=sheet_id,
+        mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ).execute()
+
+
+def get_sheet_title(sheet_id):
+    """The spreadsheet's human-readable name (e.g. "AUGUST 2026 CALL
+    LOG") -- used to name its backup file sensibly instead of just the
+    opaque sheet_id. Returns None if it can't be read for any reason."""
+    try:
+        service = _get_drive_service()
+        meta = service.files().get(fileId=sheet_id, fields="name").execute()
+        return meta.get("name")
+    except Exception:
+        return None
 
 
 def _sheet_range(a1_range):

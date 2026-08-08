@@ -1,0 +1,14 @@
+[Unit]
+Description=Cooler Tracking Whiteboard -- backup to external drive
+# Only makes sense to try once the backup drive is actually mounted --
+# see the mount unit generated from /etc/fstab for cooler-backup's
+# mount point (systemd names it after the path, with dashes for
+# slashes, e.g. mnt-cooler\x2dbackup.mount for /mnt/cooler-backup).
+RequiresMountsFor=/mnt/cooler-backup
+
+[Service]
+Type=oneshot
+# Adjust these two to match cooler-board.service's own settings.
+WorkingDirectory=/home/pi/cooler_board
+ExecStart=/usr/bin/python3 /home/pi/cooler_board/backup.py
+User=pi
