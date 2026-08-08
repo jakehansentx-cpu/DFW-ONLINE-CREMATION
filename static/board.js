@@ -541,8 +541,52 @@ async function startDetailScanPoll(caseCodes) {
   }, 2000);
 }
 
+// Auto-closes an EMPTY shelf's detail popup once a decedent actually
+// gets placed there -- same idea as startDetailScanPoll above, but
+// watches the location itself (there's no case yet to check a scan
+// timestamp for) instead of a case code. Also closes on its own after
+// a minute even if nothing gets placed, so a shared/TV board display
+// never gets stuck showing this popup indefinitely if someone walks
+// away without closing it -- safe to do here since there are no
+// editable fields to lose, unlike an occupied popup (which never
+// auto-closes for exactly that reason -- see startDetailScanPoll).
+let locationPollInterval = null;
+let locationAutoCloseTimer = null;
+
+function stopLocationPoll() {
+  if (locationPollInterval) {
+    clearInterval(locationPollInterval);
+    locationPollInterval = null;
+  }
+  if (locationAutoCloseTimer) {
+    clearTimeout(locationAutoCloseTimer);
+    locationAutoCloseTimer = null;
+  }
+}
+
+function startLocationPoll(locationCode) {
+  locationPollInterval = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/location/${encodeURIComponent(locationCode)}/lookup`);
+      const data = await res.json();
+      if (data.occupants && data.occupants.length > 0) {
+        stopLocationPoll();
+        document.getElementById("detail").classList.add("hidden");
+        poll();
+      }
+    } catch (e) {
+      // Transient fetch failure -- just try again next tick.
+    }
+  }, 2000);
+  locationAutoCloseTimer = setTimeout(() => {
+    stopLocationPoll();
+    document.getElementById("detail").classList.add("hidden");
+  }, 60000);
+}
+
 function showDetail(loc, coolerName, shelfNum) {
   stopDetailScanPoll();
+  stopLocationPoll();
   const overlay = document.getElementById("detail");
   const content = document.getElementById("detailContent");
   const where = `${coolerName} — Shelf ${shelfNum}${loc.slot ? loc.slot : ""}`;
@@ -923,7 +967,11 @@ function showDetail(loc, coolerName, shelfNum) {
     });
   }
   overlay.classList.remove("hidden");
-  startDetailScanPoll(loc.occupants.map((o) => o.case_code));
+  if (loc.occupants.length === 0) {
+    startLocationPoll(loc.location_code);
+  } else {
+    startDetailScanPoll(loc.occupants.map((o) => o.case_code));
+  }
 }
 
 function occupantNameFor(caseCode, loc) {
@@ -932,6 +980,7 @@ function occupantNameFor(caseCode, loc) {
 }
 document.getElementById("closeDetail").addEventListener("click", () => {
   stopDetailScanPoll();
+  stopLocationPoll();
   document.getElementById("detail").classList.add("hidden");
 });
 
