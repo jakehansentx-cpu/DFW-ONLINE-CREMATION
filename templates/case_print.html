@@ -89,7 +89,12 @@
     // name can't end up smaller than the others.) Runs before print so
     // the fitted size is what actually prints.
     function autoFitGroup(container, elements, minFontSize) {
-      let fontSize = parseFloat(getComputedStyle(elements[0]).fontSize);
+      // getComputedStyle reports px, but the size is applied back as
+      // "Npt" below -- convert once up front (px * 0.75 = pt at the
+      // standard 96dpi CSS reference) so the loop doesn't start from a
+      // px number mislabeled as pt, which had been quietly INFLATING
+      // the very first shrink step instead of shrinking it.
+      let fontSize = parseFloat(getComputedStyle(elements[0]).fontSize) * 0.75;
       const fits = () =>
         container.scrollHeight <= container.clientHeight &&
         elements.every((el) => el.scrollWidth <= el.clientWidth);

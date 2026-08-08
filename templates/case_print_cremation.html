@@ -89,7 +89,12 @@
   <script>
     function autoFitLine(el, minFontSize) {
       if (!el) return;
-      let fontSize = parseFloat(getComputedStyle(el).fontSize);
+      // getComputedStyle reports px, but the size is applied back as
+      // "Npt" below -- convert once up front (px * 0.75 = pt at the
+      // standard 96dpi CSS reference) so the loop doesn't start from a
+      // px number mislabeled as pt, which had been quietly INFLATING
+      // the very first shrink step instead of shrinking it.
+      let fontSize = parseFloat(getComputedStyle(el).fontSize) * 0.75;
       while (el.scrollWidth > el.clientWidth && fontSize > minFontSize) {
         fontSize -= 0.5;
         el.style.fontSize = fontSize + "pt";
