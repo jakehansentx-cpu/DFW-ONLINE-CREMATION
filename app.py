@@ -2036,13 +2036,33 @@ def case_print_label_page(case_code):
     )
 
 
+def _paginate_evenly(items, max_per_page):
+    """Splits items into pages of at most max_per_page each, spreading
+    a remainder evenly across pages instead of cramming every page full
+    and leaving a nearly-empty last one -- e.g. 6 items at max 4 becomes
+    two pages of 3 (not a full page of 4 plus a page of 2)."""
+    if not items:
+        return []
+    num_pages = (len(items) + max_per_page - 1) // max_per_page
+    base, remainder = divmod(len(items), num_pages)
+    pages = []
+    i = 0
+    for p in range(num_pages):
+        count = base + (1 if p < remainder else 0)
+        pages.append(items[i : i + count])
+        i += count
+    return pages
+
+
 @app.route("/case/<case_code>/print-inventory")
 @login_required
 def case_print_inventory_page(case_code):
     """Printable page of every inventory photo logged for this case, for
     a staff member to keep with the file or hand over alongside the
     decedent's property. Office printer only -- there's no label-printer
-    equivalent, since these are full photos, not a small tag."""
+    equivalent, since these are full photos, not a small tag. Four
+    photos per page, laid out 2x2 -- see _paginate_evenly for how a
+    count that doesn't divide evenly by 4 gets balanced across pages."""
     db = get_db()
     case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
     if case is None:
@@ -2053,6 +2073,7 @@ def case_print_inventory_page(case_code):
         case=case,
         case_code=case_code,
         items=items,
+        pages=_paginate_evenly(items, 4),
     )
 
 
