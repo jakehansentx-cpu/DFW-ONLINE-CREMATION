@@ -341,6 +341,20 @@ body {
   width: 100%; font-size: 18px; padding: 10px; margin-top: 4px;
   border-radius: 6px; border: 1px solid #333; background: #0d1116; color: #fff;
 }
+/* The browser's built-in date/time picker icons default to a dark glyph
+   that barely shows up against this dark input background -- inverting
+   turns it white so it actually stands out. (A background badge behind
+   it would defeat the point -- a white icon needs to sit on the dark
+   input, not on its own light patch -- so this is just the icon itself,
+   enlarged and with a bigger tap target.) */
+.info-form input[type="date"]::-webkit-calendar-picker-indicator,
+.info-form input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+  padding: 4px;
+  transform: scale(1.4);
+  transform-origin: right center;
+}
 .primary-btn {
   margin-top: 16px; width: 100%; padding: 14px; font-size: 17px;
   background: #2a5d8a; color: #fff; border: none; border-radius: 8px;

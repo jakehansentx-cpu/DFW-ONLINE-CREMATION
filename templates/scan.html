@@ -24,7 +24,6 @@
 
   <div class="staff-row">
     <span>Logged in as <b>{{ username }}</b></span>
-    <a href="/change-password" style="color:#889; font-size:13px; margin-left:auto;">Change Password</a>
   </div>
   <script>window.CURRENT_STAFF_NAME = {{ username | tojson }};</script>
 
@@ -92,7 +91,8 @@
     <label>Removal Type</label>
     <input id="fRemovalType" type="text">
     <label>Disposition</label>
-    <input id="fDisposition" type="text">
+    <input id="fDisposition" type="text" list="dispositionSuggestions" autocomplete="off" placeholder="Choose or type a disposition">
+    <datalist id="dispositionSuggestions"></datalist>
     <label>Removal By</label>
     <input id="fRemovalBy" type="text">
     <label><input id="fNight" type="checkbox" style="width:auto; margin-right:8px;">Night</label>

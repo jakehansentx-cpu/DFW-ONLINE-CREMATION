@@ -136,6 +136,13 @@ def logout():
 @app.route("/change-password", methods=["GET", "POST"])
 @login_required
 def change_password():
+    # Staff can no longer change their own password on demand -- only an
+    # admin can, via Reset Password on the Admin page (which sets a fresh
+    # temp password and routes back through this same forced flow). This
+    # route still exists for that forced first-login/post-reset step.
+    if not session.get("must_change_password"):
+        return redirect(url_for("board_page"))
+
     error = None
     if request.method == "POST":
         new_password = request.form.get("new_password") or ""
@@ -310,6 +317,12 @@ def init_db():
             created_at TEXT NOT NULL,
             last_login_at TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS disposition_options (
+            id INTEGER PRIMARY KEY,
+            label TEXT UNIQUE NOT NULL,
+            created_at TEXT NOT NULL
+        );
         """
     )
     # Migrate DBs created before these columns existed.
@@ -410,6 +423,24 @@ def init_db():
             f"Seeded {len(config.STAFF_NAMES)} login(s) with temporary password "
             f"'{config.INITIAL_TEMP_PASSWORD}' -- {config.STAFF_NAMES[0]} is the initial admin."
         )
+
+    # First run only: seed the Disposition dropdown with the common values
+    # staff actually use -- Admin can add/remove from there afterward (see
+    # /admin/dispositions/create). The field stays free-text underneath
+    # (a <datalist>, not a <select>) so an unusual one-off can always be
+    # typed even if it's not in this list.
+    disposition_count = db.execute("SELECT COUNT(*) AS n FROM disposition_options").fetchone()["n"]
+    if disposition_count == 0:
+        for label in (
+            "PU/HOLD", "PICKUP/PREP", "HOLD", "FH DROP OFF",
+            "STORAGE", "PREP", "DIRECT CREMATION",
+        ):
+            db.execute(
+                "INSERT INTO disposition_options (label, created_at) VALUES (?, ?)",
+                (label, now()),
+            )
+        db.commit()
+
     db.close()
 
 
@@ -1064,7 +1095,16 @@ def admin_page():
         }
         for r in rows
     ]
-    return render_template("admin.html", users_json=jsonify(users).get_data(as_text=True), username=session["username"])
+    dispositions = [
+        {"id": r["id"], "label": r["label"]}
+        for r in db.execute("SELECT * FROM disposition_options ORDER BY id").fetchall()
+    ]
+    return render_template(
+        "admin.html",
+        users_json=jsonify(users).get_data(as_text=True),
+        dispositions_json=jsonify(dispositions).get_data(as_text=True),
+        username=session["username"],
+    )
 
 
 @app.route("/admin/users/create", methods=["POST"])
@@ -1146,6 +1186,47 @@ def admin_user_history(user_id):
     if user is None:
         return jsonify(error="Unknown user"), 404
     return jsonify(username=user["username"], history=get_staff_history(db, user["username"]))
+
+
+@app.route("/api/dispositions")
+@login_required
+def api_dispositions():
+    """Options for the Disposition field's suggestion list (Decedent
+    Information / edit forms) -- see disposition_options. The field stays
+    free-text underneath, so anything not in this list can still be typed
+    in by hand."""
+    db = get_db()
+    rows = db.execute("SELECT label FROM disposition_options ORDER BY id").fetchall()
+    return jsonify(options=[r["label"] for r in rows])
+
+
+@app.route("/admin/dispositions/create", methods=["POST"])
+@admin_required
+def admin_create_disposition():
+    data = request.get_json(force=True)
+    label = (data.get("label") or "").strip()
+    if not label:
+        return jsonify(error="Enter a disposition"), 400
+
+    db = get_db()
+    existing = db.execute("SELECT 1 FROM disposition_options WHERE label = ?", (label,)).fetchone()
+    if existing:
+        return jsonify(error=f'"{label}" is already in the list'), 409
+
+    cur = db.execute(
+        "INSERT INTO disposition_options (label, created_at) VALUES (?, ?)", (label, now())
+    )
+    db.commit()
+    return jsonify(ok=True, id=cur.lastrowid, label=label)
+
+
+@app.route("/admin/dispositions/<int:option_id>/delete", methods=["POST"])
+@admin_required
+def admin_delete_disposition(option_id):
+    db = get_db()
+    db.execute("DELETE FROM disposition_options WHERE id = ?", (option_id,))
+    db.commit()
+    return jsonify(ok=True)
 
 
 def expected_sheet_name(dt):

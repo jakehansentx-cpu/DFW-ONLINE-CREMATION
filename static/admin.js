@@ -208,3 +208,75 @@ sheetSetBtn.addEventListener("click", async () => {
     console.error("sheet status check failed", e);
   }
 })();
+
+// ---------------- Disposition options ----------------
+// Feeds the <datalist> suggestions on the Disposition field in the scan
+// app (see loadDispositionSuggestions in scan.js) -- the field itself
+// stays free-text, so this list is just the common ones worth offering.
+let dispositions = window.INITIAL_DISPOSITIONS || [];
+
+const dispositionList = document.getElementById("dispositionList");
+const newDisposition = document.getElementById("newDisposition");
+const addDispositionBtn = document.getElementById("addDispositionBtn");
+const addDispositionStatus = document.getElementById("addDispositionStatus");
+
+function renderDispositions() {
+  dispositionList.innerHTML = dispositions
+    .map(
+      (d) => `
+        <div class="inventory-row" data-disposition-id="${d.id}">
+          <div class="inventory-info" style="flex:1;">${escapeHtml(d.label)}</div>
+          <button class="secondary-btn remove-disposition-btn" data-id="${d.id}" style="width:auto; padding:8px 12px;">Remove</button>
+        </div>`
+    )
+    .join("");
+
+  dispositionList.querySelectorAll(".remove-disposition-btn").forEach((btn) => {
+    btn.addEventListener("click", () => removeDisposition(btn.dataset.id));
+  });
+}
+
+async function removeDisposition(id) {
+  const d = dispositions.find((x) => String(x.id) === String(id));
+  if (!d || !confirm(`Remove "${d.label}" from the disposition list?`)) return;
+  try {
+    const res = await fetch(`/admin/dispositions/${id}/delete`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Couldn't remove it");
+    dispositions = dispositions.filter((x) => String(x.id) !== String(id));
+    renderDispositions();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+addDispositionBtn.addEventListener("click", async () => {
+  const label = newDisposition.value.trim();
+  if (!label) {
+    addDispositionStatus.textContent = "Enter a disposition.";
+    addDispositionStatus.className = "status-msg err";
+    return;
+  }
+  addDispositionBtn.disabled = true;
+  try {
+    const res = await fetch("/admin/dispositions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Couldn't add that disposition");
+    dispositions.push({ id: data.id, label: data.label });
+    renderDispositions();
+    newDisposition.value = "";
+    addDispositionStatus.textContent = "Added.";
+    addDispositionStatus.className = "status-msg ok";
+  } catch (err) {
+    addDispositionStatus.textContent = err.message;
+    addDispositionStatus.className = "status-msg err";
+  } finally {
+    addDispositionBtn.disabled = false;
+  }
+});
+
+renderDispositions();

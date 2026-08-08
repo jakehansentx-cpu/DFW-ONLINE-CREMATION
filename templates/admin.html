@@ -43,6 +43,16 @@
     <div id="sheetSetStatus" class="status-msg"></div>
   </div>
 
+  <div class="info-form">
+    <h3 style="margin-top:0;">Disposition Options</h3>
+    <p style="color:#aab; font-size:14px; margin-top:0;">Shown as suggestions on the Disposition field -- staff can still type anything not listed here.</p>
+    <label>Add a Disposition</label>
+    <input id="newDisposition" type="text" placeholder="e.g. AWAITING PAPERWORK" autocomplete="off">
+    <button id="addDispositionBtn" class="primary-btn">Add Disposition</button>
+    <div id="addDispositionStatus" class="status-msg"></div>
+    <div id="dispositionList" class="inventory-list" style="margin-top:14px;"></div>
+  </div>
+
   <div id="historyOverlay" class="detail-overlay hidden">
     <div class="detail-card">
       <button id="closeHistory" class="close-btn">&times;</button>
@@ -54,6 +64,7 @@
 
   <script>
     window.INITIAL_USERS = {{ users_json | safe }};
+    window.INITIAL_DISPOSITIONS = {{ dispositions_json | safe }};
   </script>
   <script src="{{ url_for('static', filename='admin.js') }}"></script>
 </body>

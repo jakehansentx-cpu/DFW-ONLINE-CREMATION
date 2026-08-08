@@ -165,6 +165,24 @@ let cameraStream = null;
 let cameraLoopId = null;
 let cameraCooldown = false; // prevents re-firing on the same code every frame
 
+// Disposition suggestions -- Admin manages the list (see admin.js); this
+// just fills the <datalist> so the field offers them while still taking
+// any free-text value that isn't in the list.
+(async function loadDispositionSuggestions() {
+  const datalist = document.getElementById("dispositionSuggestions");
+  if (!datalist) return;
+  try {
+    const res = await fetch("/api/dispositions");
+    if (!res.ok) return;
+    const data = await res.json();
+    datalist.innerHTML = (data.options || [])
+      .map((label) => `<option value="${label.replace(/"/g, "&quot;")}">`)
+      .join("");
+  } catch (e) {
+    console.error("failed to load disposition suggestions", e);
+  }
+})();
+
 let mode = "home";
 let step = "case";       // case | location
 let currentCaseCode = null;
@@ -325,15 +343,34 @@ printLabelGateBtn.addEventListener("click", advancePastPrintGate);
 // field tag instead of printing a new one. Scanning that tag here links
 // it (via /api/sheet-intake/link-tag) to the case just created, so later
 // scans of the same physical tag resolve to this case instead of
-// claiming a different, unrelated one.
+// claiming a different, unrelated one. A tag only gets PRINTED here if
+// one actually still needs to be made -- staff can instead print a
+// fresh one (office or label printer) if they don't already have a
+// hand-written tag ready; either path lands on the same next step
+// (scan the slot location), since a freshly printed tag already carries
+// the real case code and needs no separate linking.
 function showTagLinkStep(code, nameTag) {
   infoForm.classList.add("hidden");
   startSheetCaseBtn.classList.add("hidden");
   step = "link-tag";
   cameraBtn.classList.remove("hidden");
-  stepLabel.textContent = `Scan the tag you wrote ${code}${nameTag}'s info on`;
-  showStatus("Saved. Scan the physical tag to link it.", true);
+  printTagLink.href = `/case/${encodeURIComponent(code)}/print`;
+  printLabelLink.href = `/case/${encodeURIComponent(code)}/print-label`;
+  printTagLink.classList.remove("hidden");
+  printLabelLink.classList.remove("hidden");
+  stepLabel.textContent = `Scan the tag you wrote ${code}${nameTag}'s info on -- or print a new one below`;
+  showStatus("Saved. Scan the physical tag to link it, or print a new one.", true);
 }
+
+function advancePastTagLinkPrint() {
+  printTagLink.classList.add("hidden");
+  printLabelLink.classList.add("hidden");
+  step = "location";
+  stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}${nameSuffix(currentCaseName)}`;
+  showStatus("Scan a slot location.", true);
+}
+printTagLink.addEventListener("click", advancePastTagLinkPrint);
+printLabelLink.addEventListener("click", advancePastTagLinkPrint);
 
 async function handleTagLinkScan(rawCode) {
   const placeholderCode = normalizeCaseCode(rawCode);
