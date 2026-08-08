@@ -341,7 +341,7 @@ function advancePastPrintGate() {
   cameraBtn.classList.remove("hidden");
   step = "location";
   stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}${nameSuffix(currentCaseName)}`;
-  showStatus("Scan a slot location.", true);
+  showStatus("Scan the empty shelf location QR code.", true);
 }
 printGateBtn.addEventListener("click", advancePastPrintGate);
 printLabelGateBtn.addEventListener("click", advancePastPrintGate);
@@ -375,7 +375,7 @@ function advancePastTagLinkPrint() {
   printLabelLink.classList.add("hidden");
   step = "location";
   stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}${nameSuffix(currentCaseName)}`;
-  showStatus("Scan a slot location.", true);
+  showStatus("Scan the empty shelf location QR code.", true);
 }
 printTagLink.addEventListener("click", advancePastTagLinkPrint);
 printLabelLink.addEventListener("click", advancePastTagLinkPrint);
@@ -393,7 +393,7 @@ async function handleTagLinkScan(rawCode) {
     });
     step = "location";
     stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}${nameSuffix(currentCaseName)}`;
-    showStatus("Tag linked. Scan a slot location.", true);
+    showStatus("Tag linked. Scan the empty shelf location QR code.", true);
   } catch (err) {
     showStatus(err.message, false);
   }
@@ -621,7 +621,7 @@ async function handleCaseScan(rawCode) {
     // at the location-scan step instead of leaving the case stranded.
     step = "location";
     stepLabel.textContent = `Now scan the SLOT location for ${code}${nameTag}`;
-    showStatus(`${code}${nameTag} recognized. Scan a slot location.`, true);
+    showStatus(`${code}${nameTag} recognized. Scan the empty shelf location QR code.`, true);
   }
 
   if (mode === "move") {
@@ -1213,7 +1213,7 @@ confirmCheckinBtn.addEventListener("click", async () => {
     checkinForm.classList.add("hidden");
     step = "location";
     stepLabel.textContent = `Now scan the SLOT location for ${currentCaseCode}${nameSuffix(currentCaseName)}`;
-    showStatus(`${currentCaseCode} checked in.${warning} Scan a slot location.`, !result.sheet_warning);
+    showStatus(`${currentCaseCode} checked in.${warning} Scan the empty shelf location QR code.`, !result.sheet_warning);
   } catch (err) {
     showStatus(err.message, false);
   }
