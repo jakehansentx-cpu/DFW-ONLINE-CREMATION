@@ -2464,11 +2464,21 @@ def api_case_lookup():
 @login_required
 def api_case_info(case_code):
     """
-    Save/edit intake info: name, funeral home, pickup date. Used by the
-    scan station's Field Intake/Assign flows AND the board's click-to-edit
-    -- either way, syncs back to the sheet the same as sheet-intake save
-    does, so an edit made from the board doesn't fall out of sync with
-    the call log.
+    Save/edit intake info. Used by two different callers with two
+    different amounts of data:
+      - The scan station's Assign/smart-scan-claim flow (a decedent
+        reached by scanning an EXISTING physical tag, e.g. a pre-printed
+        blank field tag) -- sends the full intake form, same fields as
+        Decedent Information's /api/sheet-intake/save.
+      - The board's click-to-edit -- only ever sends name/funeral_home/
+        pickup_date.
+    Any field not present in this request falls back to the case's
+    current value, so a board edit can never blank out removal
+    type/disposition/etc. that a fuller save already recorded. Syncs
+    back to the sheet the same way sheet-intake save does (removal
+    details, the case link, and the O/P/R defaults), so a case created
+    via a scanned tag doesn't end up with a sparser sheet row than one
+    created via Decedent Information.
     """
     data = request.get_json(force=True)
     db = get_db()
@@ -2483,12 +2493,19 @@ def api_case_info(case_code):
     name = data.get("name", row["name"])
     funeral_home = data.get("funeral_home", row["funeral_home"])
     pickup_date = data.get("pickup_date", row["pickup_date"])
+    time_received = data.get("time_received", row["time_received"])
+    removal_type = data.get("removal_type", row["removal_type"])
+    disposition = data.get("disposition", row["disposition"])
+    removal_by = data.get("removal_by", row["removal_by"])
+    night = data.get("night", row["night"])
 
     db.execute(
         """UPDATE cases
-           SET name = ?, funeral_home = ?, pickup_date = ?, status = ?
+           SET name = ?, funeral_home = ?, pickup_date = ?, status = ?,
+               time_received = ?, removal_type = ?, disposition = ?, removal_by = ?, night = ?
            WHERE case_code = ?""",
-        (name, funeral_home, pickup_date, new_status, case_code),
+        (name, funeral_home, pickup_date, new_status,
+         time_received, removal_type, disposition, removal_by, night, case_code),
     )
     db.commit()
 
@@ -2501,6 +2518,27 @@ def api_case_info(case_code):
                 _sheets().backfill_intake(
                     sid, sheet_row, format_date_for_sheet(pickup_date), name, funeral_home
                 )
+                _sheets().backfill_removal_details(
+                    sid, sheet_row, format_time_for_sheet(time_received),
+                    removal_type, disposition, removal_by, night,
+                )
+                if not _sheets().row_has_case_link(sid, sheet_row):
+                    target_url = request.host_url.rstrip("/") + url_for(
+                        "case_detail_page", case_code=case_code
+                    )
+                    _sheets().backfill_case_link(sid, sheet_row, target_url)
+                has_inventory = db.execute(
+                    "SELECT 1 FROM inventory_items WHERE case_id = ?", (row["id"],)
+                ).fetchone() is not None
+                view_url, add_url = _inventory_status_urls(request.host_url.rstrip("/"), case_code)
+                _sheets().backfill_inventory_status(sid, sheet_row, has_inventory, view_url, add_url)
+                has_documents = db.execute(
+                    "SELECT 1 FROM case_documents WHERE case_id = ?", (row["id"],)
+                ).fetchone() is not None
+                doc_view_url, doc_add_url = _documents_status_urls(request.host_url.rstrip("/"), case_code)
+                _sheets().backfill_documents_status(sid, sheet_row, has_documents, doc_view_url, doc_add_url)
+                created_at = datetime.strptime(row["created_at"], "%Y-%m-%d %H:%M:%S")
+                _sheets().backfill_storage_days(sid, sheet_row, created_at)
         except Exception as e:
             sheet_warning = f"Saved locally, but sheet write failed: {e}"
 
