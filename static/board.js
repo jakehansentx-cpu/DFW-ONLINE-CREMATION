@@ -270,6 +270,120 @@ boardSearchInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") runBoardSearch();
 });
 
+// ---------------- Board QR scan ----------------
+// Alternative to typing into the search box above -- scan a decedent's
+// armband or a shelf's own tag and jump straight to it, same as a typed
+// search would (including switching tabs if it's on a different
+// screen). /api/board's rows cover every location (occupied or not),
+// so a location scan works even for an empty shelf.
+const boardScanBtn = document.getElementById("boardScanBtn");
+const boardCameraPanel = document.getElementById("boardCameraPanel");
+const boardCameraVideo = document.getElementById("boardCameraVideo");
+const boardCameraCanvas = document.getElementById("boardCameraCanvas");
+const boardCameraStopBtn = document.getElementById("boardCameraStopBtn");
+let boardCameraStream = null;
+let boardCameraLoopId = null;
+let boardCameraCooldown = false;
+
+function normalizeBoardScan(raw) {
+  if (raw.startsWith("LOC|")) return { type: "location", code: raw };
+  const urlMatch = raw.match(/\/case\/([^/?#]+)\/?$/);
+  if (urlMatch) return { type: "case", code: decodeURIComponent(urlMatch[1]) };
+  if (raw.startsWith("CASE|")) return { type: "case", code: raw };
+  return null;
+}
+
+function jumpToBoardRow(matchFn, notFoundMsg) {
+  const match = latestRows.find(matchFn);
+  if (!match) {
+    showSearchStatus(notFoundMsg, false);
+    return;
+  }
+  showSearchStatus(
+    `Found ${match.name || match.case_code || match.location_code} — ${match.cooler_name}, Shelf ${match.shelf}${match.slot || ""}.`,
+    true
+  );
+  if (match.screen !== currentScreen) {
+    currentScreen = match.screen;
+    boardTabs.querySelectorAll(".board-tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.screen === match.screen));
+  }
+  resetMoveSelection();
+  renderBoard(latestRows);
+  requestAnimationFrame(() => {
+    const cell = document.querySelector(`.slot-cell[data-location="${CSS.escape(match.location_code)}"]`);
+    if (!cell) return;
+    cell.scrollIntoView({ behavior: "smooth", block: "center" });
+    cell.classList.add("search-highlight");
+    setTimeout(() => cell.classList.remove("search-highlight"), 3000);
+  });
+}
+
+async function handleBoardScan(rawCode) {
+  const parsed = normalizeBoardScan(rawCode);
+  if (!parsed) {
+    showSearchStatus("That doesn't look like a Case ID or location QR code.", false);
+    return;
+  }
+  stopBoardCamera();
+  if (parsed.type === "location") {
+    jumpToBoardRow((r) => r.location_code === parsed.code, `Unknown location: ${parsed.code}`);
+  } else {
+    jumpToBoardRow((r) => r.case_code === parsed.code, `${parsed.code} isn't currently placed on a shelf.`);
+  }
+}
+
+async function startBoardCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showSearchStatus("Camera not available on this device/browser.", false);
+    return;
+  }
+  try {
+    boardCameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+    });
+  } catch (err) {
+    showSearchStatus("Camera permission denied or unavailable: " + err.message, false);
+    return;
+  }
+  boardCameraVideo.srcObject = boardCameraStream;
+  boardCameraVideo.muted = true;
+  await boardCameraVideo.play();
+  boardCameraPanel.classList.remove("hidden");
+  boardScanBtn.classList.add("hidden");
+  boardCameraLoop();
+}
+
+function stopBoardCamera() {
+  if (boardCameraLoopId) cancelAnimationFrame(boardCameraLoopId);
+  if (boardCameraStream) {
+    boardCameraStream.getTracks().forEach((t) => t.stop());
+    boardCameraStream = null;
+  }
+  boardCameraPanel.classList.add("hidden");
+  boardScanBtn.classList.remove("hidden");
+}
+
+function boardCameraLoop() {
+  const ctx = boardCameraCanvas.getContext("2d", { willReadFrequently: true });
+  if (boardCameraVideo.readyState === boardCameraVideo.HAVE_ENOUGH_DATA) {
+    boardCameraCanvas.width = boardCameraVideo.videoWidth;
+    boardCameraCanvas.height = boardCameraVideo.videoHeight;
+    ctx.drawImage(boardCameraVideo, 0, 0, boardCameraCanvas.width, boardCameraCanvas.height);
+    const imageData = ctx.getImageData(0, 0, boardCameraCanvas.width, boardCameraCanvas.height);
+    const result = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+    if (result && result.data && !boardCameraCooldown) {
+      boardCameraCooldown = true;
+      handleBoardScan(result.data.trim()).finally(() => {
+        setTimeout(() => { boardCameraCooldown = false; }, 1500);
+      });
+    }
+  }
+  boardCameraLoopId = requestAnimationFrame(boardCameraLoop);
+}
+
+boardScanBtn.addEventListener("click", startBoardCamera);
+boardCameraStopBtn.addEventListener("click", stopBoardCamera);
+
 function renderBoard(rows) {
   const grid = document.getElementById("grid");
   const byCooler = {};
@@ -452,13 +566,25 @@ function showDetail(loc, coolerName, shelfNum) {
         <input type="date" class="edit-date" data-case="${escapeHtml(o.case_code)}" value="${escapeHtml(o.pickup_date || "")}">
         <button class="save-occupant-btn" data-case="${escapeHtml(o.case_code)}" data-index="${i}">Save</button>
         <div class="save-status" data-index="${i}"></div>
+        <a class="secondary-btn" href="/case/${encodeURIComponent(o.case_code)}/print" target="_blank" rel="noopener" style="display:block; text-decoration:none; text-align:center; margin-top:14px;">🖨️ Print Tag (Office Printer)</a>
+        <a class="secondary-btn" href="/case/${encodeURIComponent(o.case_code)}/print-label" target="_blank" rel="noopener" style="display:block; text-decoration:none; text-align:center; margin-top:8px;">🏷️ Print to Label Printer</a>
         <div class="move-actions">
           <button class="move-here-btn" data-case="${escapeHtml(o.case_code)}">📍 Move to New Location</button>
           <button class="move-staging-btn" data-case="${escapeHtml(o.case_code)}">🔥 Move to Cremation Staging</button>
         </div>
+        <div class="cremate-actions" data-case="${escapeHtml(o.case_code)}">
+          <button class="cremate-btn" data-case="${escapeHtml(o.case_code)}">🔥 Cremate</button>
+        </div>
+        <div class="cremate-form-inline hidden" data-case="${escapeHtml(o.case_code)}">
+          <label>Disk Number</label>
+          <input type="text" class="disk-number-input" data-case="${escapeHtml(o.case_code)}" placeholder="Cremation disk number" inputmode="numeric">
+          <button class="confirm-cremate-btn primary-btn" data-case="${escapeHtml(o.case_code)}" style="background:#5c2a2a;">Confirm Cremation</button>
+          <button class="cancel-cremate-btn secondary-btn" data-case="${escapeHtml(o.case_code)}">Cancel</button>
+        </div>
         <div class="release-actions" data-case="${escapeHtml(o.case_code)}">
           <button class="release-btn" data-case="${escapeHtml(o.case_code)}">📤 Release</button>
           <button class="checkout-btn" data-case="${escapeHtml(o.case_code)}">📦 Check Out</button>
+          <a class="inventory-link-btn" href="/scan?open=inventory&case=${encodeURIComponent(o.case_code)}" target="_blank" rel="noopener">🗂️ Inventory</a>
         </div>
         <div class="release-form-inline hidden" data-case="${escapeHtml(o.case_code)}">
           <label>Released To</label>

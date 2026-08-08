@@ -199,11 +199,13 @@ body {
 .detail-card .cremate-form-inline .secondary-btn { margin-top: 8px; }
 
 .detail-card .release-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
-.detail-card .release-btn, .detail-card .checkout-btn {
+.detail-card .release-btn, .detail-card .checkout-btn, .detail-card .inventory-link-btn {
   padding: 10px; font-size: 14px; width: 100%; border: none; border-radius: 6px; color: #fff;
+  box-sizing: border-box; display: block; text-align: center; text-decoration: none;
 }
 .detail-card .release-btn { background: #5c2a2a; }
 .detail-card .checkout-btn { background: #3a4a5c; }
+.detail-card .inventory-link-btn { background: #2a5d8a; }
 .detail-card .sig-canvas {
   width: 100%; height: 120px; background: #fff; border-radius: 6px;
   touch-action: none; margin-top: 4px; display: block;
@@ -318,7 +320,7 @@ body {
 /* QR-scan camera preview: a smaller square viewfinder instead of the full
    rectangle, since only a centered square area is needed to frame a code.
    Inventory/document photo capture keep the full-width rectangle above. */
-#cameraVideo {
+#cameraVideo, #boardCameraVideo {
   width: min(100%, 320px);
   aspect-ratio: 1 / 1;
   object-fit: cover;

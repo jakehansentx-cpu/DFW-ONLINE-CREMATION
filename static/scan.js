@@ -32,7 +32,6 @@ const releaseForm = document.getElementById("releaseForm");
 const releaseFormTitle = document.getElementById("releaseFormTitle");
 const releasedTo = document.getElementById("releasedTo");
 const confirmReleaseBtn = document.getElementById("confirmReleaseBtn");
-const confirmCrematedBtn = document.getElementById("confirmCrematedBtn");
 const cremateForm = document.getElementById("cremateForm");
 const cremateFormTitle = document.getElementById("cremateFormTitle");
 const diskNumber = document.getElementById("diskNumber");
@@ -165,6 +164,15 @@ let cameraStream = null;
 let cameraLoopId = null;
 let cameraCooldown = false; // prevents re-firing on the same code every frame
 
+const caseSearchBtn = document.getElementById("caseSearchBtn");
+const caseSearchPanel = document.getElementById("caseSearchPanel");
+const caseSearchInput = document.getElementById("caseSearchInput");
+const caseSearchResults = document.getElementById("caseSearchResults");
+// Classic per-mode screens that start with "scan a Case ID tag for X" --
+// caseSearchBtn offers name/case-number search as an alternative on all
+// of them (see resetFlow/wireCaseSearch).
+const CASE_SEARCH_MODES = ["move", "release", "cremate", "checkout", "inventory", "documents", "print"];
+
 // Disposition suggestions -- Admin manages the list (see admin.js); this
 // just fills the <datalist> so the field offers them while still taking
 // any free-text value that isn't in the list.
@@ -288,6 +296,9 @@ function resetFlow() {
   statusMsg.textContent = "";
   statusMsg.className = "status-msg";
   if (typeof stopCamera === "function") stopCamera();
+  caseSearchPanel.classList.add("hidden");
+  caseSearchInput.value = "";
+  caseSearchResults.innerHTML = "";
 
   homeScreen.classList.toggle("hidden", mode !== "home");
   findPanel.classList.toggle("hidden", mode !== "find");
@@ -301,6 +312,12 @@ function resetFlow() {
   // not shown or auto-focused.
   scanInput.classList.add("hidden");
   startSheetCaseBtn.classList.toggle("hidden", !isSheetIntake);
+  // Not every one of these actions has the physical tag handy right
+  // then (e.g. printing a replacement, or checking what was inventoried
+  // on a case released a while back) -- search by name/case number as
+  // an alternative to scanning, on every mode that starts with "scan a
+  // Case ID tag for X".
+  caseSearchBtn.classList.toggle("hidden", !CASE_SEARCH_MODES.includes(mode));
 
   if (mode === "sheet-intake") stepLabel.textContent = "Tap to pull the next case number from the sheet";
   if (mode === "intake") stepLabel.textContent = "Scan the Case ID tag (works with no signal)";
@@ -1007,6 +1024,73 @@ async function handlePrintScan(rawCode) {
   showQuickPrint(caseData.case_code, nameSuffix(currentCaseName));
 }
 
+// ==================== Case search (alternative to scanning) ====================
+// Available on every classic mode that starts with "scan a Case ID tag
+// for X" (see CASE_SEARCH_MODES/resetFlow) -- not every case has its
+// physical tag on hand right then, so search by name/case number and
+// picking a result acts exactly as if that result's tag had been
+// scanned, whatever the current mode is (processScannedCode dispatches
+// on mode already).
+let caseSearchDebounceTimer = null;
+
+caseSearchBtn.addEventListener("click", () => {
+  caseSearchPanel.classList.toggle("hidden");
+  if (!caseSearchPanel.classList.contains("hidden")) {
+    caseSearchInput.value = "";
+    caseSearchResults.innerHTML = "";
+    caseSearchInput.focus();
+  }
+});
+
+caseSearchInput.addEventListener("input", () => {
+  clearTimeout(caseSearchDebounceTimer);
+  const q = caseSearchInput.value.trim();
+  if (!q) {
+    caseSearchResults.innerHTML = "";
+    return;
+  }
+  caseSearchDebounceTimer = setTimeout(async () => {
+    try {
+      const res = await fetch(`/api/cases/search?q=${encodeURIComponent(q)}`);
+      const matches = await res.json();
+      renderCaseSearchResults(matches);
+    } catch (err) {
+      caseSearchResults.innerHTML = `<p class="status-msg err" style="margin:0;">${escapeHtmlLocal(err.message)}</p>`;
+    }
+  }, 250);
+});
+
+function renderCaseSearchResults(matches) {
+  if (matches.length === 0) {
+    caseSearchResults.innerHTML = `<p style="color:#889; margin:0;">No matches.</p>`;
+    return;
+  }
+  caseSearchResults.innerHTML = matches
+    .map(
+      (m) => `
+      <div class="inventory-row">
+        <div class="inventory-info">
+          <div><b>${escapeHtmlLocal(m.name || m.case_code)}</b></div>
+          <div style="color:#889; font-size:12.5px;">${escapeHtmlLocal(m.case_code)}${m.funeral_home ? " — " + escapeHtmlLocal(m.funeral_home) : ""}</div>
+        </div>
+        <button class="case-search-select-btn" data-case="${escapeHtmlLocal(m.case_code)}" style="padding:8px 14px; background:#2a5d8a; color:#fff; border:none; border-radius:6px;">Select</button>
+      </div>`
+    )
+    .join("");
+  caseSearchResults.querySelectorAll(".case-search-select-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const code = btn.dataset.case;
+      caseSearchPanel.classList.add("hidden");
+      cameraBtn.classList.add("hidden");
+      try {
+        await processScannedCode(`${window.location.origin}/case/${encodeURIComponent(code)}`);
+      } catch (err) {
+        showStatus(err.message, false);
+      }
+    });
+  });
+}
+
 // ==================== Find Decedent ====================
 let findDebounceTimer = null;
 
@@ -1173,14 +1257,6 @@ confirmReleaseBtn.addEventListener("click", () => {
     `Release ${currentCaseCode}${nameSuffix(currentCaseName)} to ${who}? This deactivates the tag and can't be undone.`,
     doRelease
   );
-});
-
-confirmCrematedBtn.addEventListener("click", () => {
-  releaseForm.classList.add("hidden");
-  cremateFormTitle.textContent = `Cremate Case ${currentCaseCode}${nameSuffix(currentCaseName)}`;
-  diskNumber.value = "";
-  cremateForm.classList.remove("hidden");
-  showStatus(`${currentCaseCode}${nameSuffix(currentCaseName)} — enter the disk number.`, true);
 });
 
 confirmCremateBtn.addEventListener("click", () => {

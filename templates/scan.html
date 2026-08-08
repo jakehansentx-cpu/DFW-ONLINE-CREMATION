@@ -67,6 +67,12 @@
       <canvas id="cameraCanvas" class="hidden"></canvas>
       <button id="cameraStopBtn" class="secondary-btn">Stop Camera</button>
     </div>
+    <button id="caseSearchBtn" class="secondary-btn hidden" style="margin-top:10px;">🔍 Search by Name or Case Number</button>
+    <div id="caseSearchPanel" class="info-form hidden" style="text-align:left;">
+      <label>Name or Case Number</label>
+      <input id="caseSearchInput" type="text" placeholder="Start typing..." autocomplete="off">
+      <div id="caseSearchResults" class="inventory-list" style="margin-top:12px;"></div>
+    </div>
     <div id="statusMsg" class="status-msg"></div>
   </div>
 
@@ -117,7 +123,6 @@
     <canvas id="signatureCanvas" width="500" height="180" style="width:100%; height:160px; background:#fff; border-radius:6px; touch-action:none; margin-top:4px;"></canvas>
     <button id="clearSignatureBtn" type="button" class="secondary-btn" style="margin-top:8px;">Clear Signature</button>
     <button id="confirmReleaseBtn" class="primary-btn">Confirm Release</button>
-    <button id="confirmCrematedBtn" class="secondary-btn" style="margin-top:10px; background:#5c2a2a; color:#fff;">Mark as Cremated (Final Disposition)</button>
   </div>
 
   <div id="cremateForm" class="info-form hidden">
