@@ -1625,6 +1625,24 @@ addDocumentBtn.addEventListener("click", async () => {
 
 resetFlow();
 
+// Deep link from the spreadsheet's "NO PROPERTY" link in column Q --
+// jumps straight into this case's Inventory panel, skipping the home
+// screen and a QR scan entirely, so a click from the sheet lands
+// directly on "add a photo/description" for that exact case.
+(function openInventoryDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("open") !== "inventory") return;
+  const code = params.get("case");
+  if (!code) return;
+  mode = "inventory";
+  homeScreen.classList.add("hidden");
+  scanPanel.classList.remove("hidden");
+  stepLabel.textContent = "Loading inventory...";
+  handleCaseScan(`${window.location.origin}/case/${encodeURIComponent(code)}`).catch((err) =>
+    showStatus(err.message, false)
+  );
+})();
+
 // ==================== Offline queue (Field Intake mode) ====================
 // IndexedDB, not localStorage -- survives app restarts and holds structured
 // records. Every save gets a client-generated id so a retried/duplicated

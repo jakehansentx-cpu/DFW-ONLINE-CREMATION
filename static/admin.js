@@ -280,3 +280,26 @@ addDispositionBtn.addEventListener("click", async () => {
 });
 
 renderDispositions();
+
+// ---------------- Repair inventory column (Q) ----------------
+const repairInventoryBtn = document.getElementById("repairInventoryBtn");
+const repairInventoryStatus = document.getElementById("repairInventoryStatus");
+
+repairInventoryBtn.addEventListener("click", async () => {
+  repairInventoryBtn.disabled = true;
+  repairInventoryStatus.textContent = "Checking every case against the sheet -- this can take a bit...";
+  repairInventoryStatus.className = "status-msg";
+  try {
+    const res = await fetch("/admin/repair-inventory-column", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Repair failed");
+    const errorNote = data.errors.length ? ` (${data.errors.length} row(s) couldn't be checked)` : "";
+    repairInventoryStatus.textContent = `Checked ${data.checked} case(s), fixed ${data.fixed}.${errorNote}`;
+    repairInventoryStatus.className = "status-msg ok";
+  } catch (err) {
+    repairInventoryStatus.textContent = err.message;
+    repairInventoryStatus.className = "status-msg err";
+  } finally {
+    repairInventoryBtn.disabled = false;
+  }
+});

@@ -31,10 +31,11 @@ Column layout (matches your sheet):
     P = checkout status -- filled in while a decedent is temporarily
         checked out (autopsy, organ/tissue donation, etc.), cleared
         back to blank once checked back in
-    Q = has inventory -- blank until the first inventory item (photo
-        and/or description) is logged for the case, then a "Yes" that's
-        itself a hyperlink straight to the case page's Inventory
-        section (see backfill_has_inventory())
+    Q = has inventory -- "NO PROPERTY" (linked to the scan app's
+        Inventory panel for the case) until the first inventory item
+        (photo and/or description) is logged, then "Yes" (linked to the
+        case page instead). Always one or the other, never blank -- see
+        backfill_inventory_status()
 
 "Next available case number" = the first row, scanning top to bottom,
 where column A has a value but B, D, and E are all still empty. That's
@@ -399,8 +400,11 @@ def set_case_link_dead(sheet_id, row_num):
 
 
 def row_has_inventory_flag(sheet_id, row_num):
-    """True if column Q already has anything in it for this row -- lets
-    the caller skip re-writing it on every subsequent inventory item."""
+    """True only if column Q is already showing "Yes" for this row --
+    lets the caller skip re-writing it on every subsequent inventory
+    item. A "NO PROPERTY" cell (see backfill_inventory_status) does NOT
+    count as already flagged -- that still needs to flip to "Yes" the
+    first time an item actually gets added."""
     service = _get_service()
     result = (
         service.spreadsheets()
@@ -409,16 +413,26 @@ def row_has_inventory_flag(sheet_id, row_num):
         .execute()
     )
     values = result.get("values", [])
-    return bool(values and values[0] and str(values[0][0]).strip())
+    return bool(values and values[0] and str(values[0][0]).strip().lower() == "yes")
 
 
-def backfill_has_inventory(sheet_id, row_num, case_url):
-    """Writes a "Yes" into column Q, linked straight to the case page's
-    Inventory section, the first time an inventory item (photo and/or
-    description) gets logged for a case."""
+def backfill_inventory_status(sheet_id, row_num, has_inventory, view_url, add_url):
+    """Writes column Q's inventory-status link -- "Yes" (linked to the
+    case page) once at least one inventory item has been logged for the
+    case, otherwise "NO PROPERTY" (linked straight to the scan app's
+    Inventory panel for this case, so staff can add one directly from
+    the sheet). Always writes an explicit value rather than leaving the
+    cell blank while inventory is empty -- a blank cell sitting under an
+    already-"Yes" column is exactly what invites Google Sheets' own
+    "fill down" autocomplete suggestion to silently copy the wrong row's
+    link into it (see app.py's admin repair action for cleaning up rows
+    that already got hit by that)."""
     _ensure_grid_width(sheet_id, 20)
     service = _get_service()
-    formula = f'=HYPERLINK("{case_url}", "Yes")'
+    if has_inventory:
+        formula = f'=HYPERLINK("{view_url}", "Yes")'
+    else:
+        formula = f'=HYPERLINK("{add_url}", "NO PROPERTY")'
     service.spreadsheets().values().update(
         spreadsheetId=sheet_id,
         range=_sheet_range(f"Q{row_num}"),

@@ -483,6 +483,19 @@ def format_time_for_sheet(hhmm):
         return hhmm  # unexpected format -- write it through as-is rather than crash
 
 
+def _inventory_status_urls(base_url, case_code):
+    """The two links column Q's inventory status can point to (see
+    backfill_inventory_status): the case page (once inventory exists) or
+    straight into the scan app's Inventory panel for this case (when it
+    doesn't yet, via the ?open=inventory deep link -- see scan.js). Built
+    with plain string formatting rather than url_for, so this also works
+    from the background sync loop (run_sheet_sync), which has no Flask
+    request context to build one from."""
+    view_url = f"{base_url}/case/{quote(case_code, safe='')}"
+    add_url = f"{base_url}/scan?open=inventory&case={quote(case_code, safe='')}"
+    return view_url, add_url
+
+
 def parse_date_from_sheet(sheet_date):
     """Best-effort inverse of format_date_for_sheet -- staff typing a
     date straight into the sheet (see the manual-entry sync) might write
@@ -1247,6 +1260,48 @@ def admin_delete_disposition(option_id):
     return jsonify(ok=True)
 
 
+@app.route("/admin/repair-inventory-column", methods=["POST"])
+@admin_required
+def admin_repair_inventory_column():
+    """One-off cleanup for column Q rows that got corrupted before this
+    was fixed to always write an explicit "Yes"/"NO PROPERTY" (see
+    backfill_inventory_status) -- previously a blank Q cell under an
+    already-"Yes" one could get overwritten by Google Sheets' own "fill
+    down" suggestion, copying one case's Yes link onto unrelated rows.
+    Re-derives the correct value for every tracked case from its actual
+    local inventory count and rewrites Q to match, using whichever sheet
+    each case actually lives on (a case keeps its own sheet_id even
+    after the current month rolls over)."""
+    if not config.GOOGLE_SHEETS_ENABLED:
+        return jsonify(error="Google Sheets isn't turned on yet (see config.py)"), 400
+
+    db = get_db()
+    cases = db.execute(
+        "SELECT id, case_code, sheet_id FROM cases WHERE sheet_id IS NOT NULL"
+    ).fetchall()
+
+    base_url = request.host_url.rstrip("/")
+    checked = 0
+    fixed = 0
+    errors = []
+    for case in cases:
+        checked += 1
+        try:
+            sheet_row = _sheets().find_row_for_case(case["sheet_id"], case["case_code"])
+            if not sheet_row:
+                continue
+            has_inventory = db.execute(
+                "SELECT 1 FROM inventory_items WHERE case_id = ?", (case["id"],)
+            ).fetchone() is not None
+            view_url, add_url = _inventory_status_urls(base_url, case["case_code"])
+            _sheets().backfill_inventory_status(case["sheet_id"], sheet_row, has_inventory, view_url, add_url)
+            fixed += 1
+        except Exception as e:
+            errors.append(f"{case['case_code']}: {e}")
+
+    return jsonify(ok=True, checked=checked, fixed=fixed, errors=errors)
+
+
 def expected_sheet_name(dt):
     """The exact spreadsheet name the app looks for when trying to
     auto-adopt a new monthly sheet -- MUST match the naming the Apps
@@ -1449,6 +1504,12 @@ def run_sheet_sync(db, base_url):
                 _sheets().backfill_case_link(sid, row_num, target_url)
             except Exception:
                 pass  # the local record is what matters -- the sheet link is a convenience shortcut
+
+        try:
+            view_url, add_url = _inventory_status_urls(base_url, case_code)
+            _sheets().backfill_inventory_status(sid, row_num, False, view_url, add_url)
+        except Exception:
+            pass  # not worth failing the whole sync over -- the admin repair action covers stragglers
 
         synced.append({"case_code": case_code, "name": name or None})
 
@@ -1654,10 +1715,8 @@ def api_add_inventory(case_code):
             sid = case_sheet_id(db, case)
             sheet_row = _sheets().find_row_for_case(sid, case_code)
             if sheet_row and not _sheets().row_has_inventory_flag(sid, sheet_row):
-                target_url = request.host_url.rstrip("/") + url_for(
-                    "case_detail_page", case_code=case_code
-                )
-                _sheets().backfill_has_inventory(sid, sheet_row, target_url)
+                view_url, add_url = _inventory_status_urls(request.host_url.rstrip("/"), case_code)
+                _sheets().backfill_inventory_status(sid, sheet_row, True, view_url, add_url)
         except Exception as e:
             # First inventory item already saved locally either way -- a
             # sheet write hiccup here shouldn't block staff from
@@ -2655,6 +2714,15 @@ def api_sheet_intake_save():
                         "case_detail_page", case_code=case_code
                     )
                     _sheets().backfill_case_link(sid, sheet_row, target_url)
+                # Initialize column Q explicitly (NO PROPERTY, not blank)
+                # as soon as the row exists -- see backfill_inventory_status
+                # for why leaving it blank is what causes Sheets to offer
+                # to "fill down" a neighboring row's Yes link into it.
+                has_inventory = db.execute(
+                    "SELECT 1 FROM inventory_items WHERE case_id = ?", (row["id"],)
+                ).fetchone() is not None
+                view_url, add_url = _inventory_status_urls(request.host_url.rstrip("/"), case_code)
+                _sheets().backfill_inventory_status(sid, sheet_row, has_inventory, view_url, add_url)
         except Exception as e:
             # Local save already succeeded -- don't fail the whole request
             # over a sheet write hiccup, just tell the caller it happened.

@@ -44,6 +44,18 @@
   </div>
 
   <div class="info-form">
+    <h3 style="margin-top:0;">Repair Inventory Column (Q)</h3>
+    <p style="color:#aab; font-size:14px; margin-top:0;">
+      Fixes rows where column Q ended up with the wrong "Yes" link (e.g. from Google Sheets'
+      own "fill down" suggestion copying one row's link onto others below it). Re-checks every
+      case against its actual local inventory and rewrites Q to the correct Yes / NO PROPERTY
+      link. Safe to run any time -- can take a little while if there are a lot of cases.
+    </p>
+    <button id="repairInventoryBtn" class="primary-btn">Repair Column Q</button>
+    <div id="repairInventoryStatus" class="status-msg"></div>
+  </div>
+
+  <div class="info-form">
     <h3 style="margin-top:0;">Disposition Options</h3>
     <p style="color:#aab; font-size:14px; margin-top:0;">Shown as suggestions on the Disposition field -- staff can still type anything not listed here.</p>
     <label>Add a Disposition</label>
