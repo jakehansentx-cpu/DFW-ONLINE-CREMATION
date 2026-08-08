@@ -465,6 +465,24 @@ def format_date_for_sheet(iso_date):
         return iso_date  # unexpected format -- write it through as-is rather than crash
 
 
+def format_time_for_sheet(hhmm):
+    """
+    The time picker always sends 24-hour HH:MM internally (that's the
+    only format an <input type="time"> value ever comes in, regardless
+    of how it's displayed on-screen). The sheet's existing times read
+    like 11:00 PM / 2:00 AM -- write ours the same way instead of as
+    military time, so the column stays consistent no matter whether a
+    row came from the app or was typed straight into the sheet.
+    """
+    if not hhmm:
+        return hhmm
+    try:
+        dt = datetime.strptime(hhmm, "%H:%M")
+        return f"{dt.strftime('%I').lstrip('0') or '12'}:{dt.strftime('%M %p')}"
+    except ValueError:
+        return hhmm  # unexpected format -- write it through as-is rather than crash
+
+
 def parse_date_from_sheet(sheet_date):
     """Best-effort inverse of format_date_for_sheet -- staff typing a
     date straight into the sheet (see the manual-entry sync) might write
@@ -2630,7 +2648,7 @@ def api_sheet_intake_save():
                     sid, sheet_row, format_date_for_sheet(pickup_date), name, funeral_home
                 )
                 _sheets().backfill_removal_details(
-                    sid, sheet_row, time_received, removal_type, disposition, removal_by, night
+                    sid, sheet_row, format_time_for_sheet(time_received), removal_type, disposition, removal_by, night
                 )
                 if not _sheets().row_has_case_link(sid, sheet_row):
                     target_url = request.host_url.rstrip("/") + url_for(
