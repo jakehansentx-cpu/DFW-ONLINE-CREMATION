@@ -1408,7 +1408,7 @@ function stopInventoryCamera() {
 
 function captureInventoryPhoto() {
   if (!inventoryCameraStream) return;
-  playBeep();
+  playShutterSound();
   const ctx = inventoryCameraCanvas.getContext("2d");
   inventoryCameraCanvas.width = inventoryCameraVideo.videoWidth;
   inventoryCameraCanvas.height = inventoryCameraVideo.videoHeight;
@@ -1614,7 +1614,7 @@ function stopDocumentsCamera() {
 
 function captureDocumentsPhoto() {
   if (!documentsCameraStream) return;
-  playBeep();
+  playShutterSound();
   const ctx = documentsCameraCanvas.getContext("2d");
   documentsCameraCanvas.width = documentsCameraVideo.videoWidth;
   documentsCameraCanvas.height = documentsCameraVideo.videoHeight;
@@ -1848,14 +1848,10 @@ setInterval(flushQueue, 20000);
 cameraBtn.addEventListener("click", startCamera);
 cameraStopBtn.addEventListener("click", stopCamera);
 
-// Synthesized beep (Web Audio API) instead of an audio file -- keeps this
-// fully local/offline like everything else here, and it's just a couple
-// lines either way. Also doubles as the shutter sound for inventory/
-// document photo captures (see captureInventoryPhoto/captureDocumentsPhoto)
-// so staff get the same audible confirmation there as scanning a code,
-// instead of tapping repeatedly unsure whether a photo was taken.
-// Browsers only allow audio to start from a real user gesture, so the
-// AudioContext gets created/resumed inside each camera's start function
+// Synthesized sounds (Web Audio API) instead of audio files -- keeps this
+// fully local/offline like everything else here. Browsers only allow
+// audio to start from a real user gesture, so the AudioContext gets
+// created/resumed inside each camera's start function
 // (startCamera/startInventoryCamera/startDocumentsCamera -- all click
 // handlers), not lazily on first use.
 let audioCtx = null;
@@ -1873,6 +1869,49 @@ function playBeep() {
     osc.stop(audioCtx.currentTime + 0.12);
   } catch (e) {
     // Audio blocked/unavailable -- scanning itself still works fine either way.
+  }
+}
+
+// Old-camera shutter click for Inventory/Document photo captures (see
+// captureInventoryPhoto/captureDocumentsPhoto) -- two short bursts of
+// filtered noise (no audio file, synthesized same as playBeep) shaped
+// to sound like a mechanical shutter opening then closing, rather than
+// an electronic beep, so staff get an unambiguous "photo taken" cue
+// instead of tapping repeatedly unsure whether it registered.
+function playShutterSound() {
+  try {
+    if (!audioCtx) return;
+    const t0 = audioCtx.currentTime;
+
+    function click(startTime, duration, peakGain, filterFreq) {
+      const sampleCount = Math.floor(audioCtx.sampleRate * duration);
+      const buffer = audioCtx.createBuffer(1, sampleCount, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < sampleCount; i++) {
+        // Noise burst with a fast decay envelope baked into the samples
+        // themselves -- this is what makes it read as a sharp "click"
+        // instead of a sustained hiss.
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / sampleCount, 3);
+      }
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = "highpass";
+      filter.frequency.value = filterFreq;
+      const gain = audioCtx.createGain();
+      gain.gain.setValueAtTime(peakGain, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioCtx.destination);
+      noise.start(startTime);
+      noise.stop(startTime + duration);
+    }
+
+    click(t0, 0.045, 0.6, 2200); // shutter opening -- sharp, bright
+    click(t0 + 0.065, 0.035, 0.4, 1200); // shutter closing -- a beat later, softer/lower
+  } catch (e) {
+    // Audio blocked/unavailable -- capture itself still works fine either way.
   }
 }
 
