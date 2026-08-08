@@ -1298,7 +1298,12 @@ def admin_repair_inventory_column():
     sync. Re-derives the correct value for every tracked case from its
     actual local data and rewrites O, P, and R to match, using whichever
     sheet each case actually lives on (a case keeps its own sheet_id
-    even after the current month rolls over)."""
+    even after the current month rolls over). Also fills in row 1's
+    header labels for O/P/R (INVENTORY / Documents / Days in Storage)
+    on every sheet in use, but only where that header cell is blank --
+    a new or duplicated monthly sheet can otherwise show a generic
+    "Column 16" placeholder there since the app itself never writes
+    row 1, only data rows."""
     if not config.GOOGLE_SHEETS_ENABLED:
         return jsonify(error="Google Sheets isn't turned on yet (see config.py)"), 400
 
@@ -1311,6 +1316,14 @@ def admin_repair_inventory_column():
     checked = 0
     fixed = 0
     errors = []
+    headers_fixed = []
+    sheet_ids = {case["sheet_id"] for case in cases}
+    sheet_ids.add(current_sheet_id(db))
+    for sheet_id in sorted(sheet_ids):
+        try:
+            headers_fixed += _sheets().ensure_column_headers(sheet_id)
+        except Exception as e:
+            errors.append(f"headers on {sheet_id}: {e}")
     for case in cases:
         checked += 1
         try:
@@ -1338,7 +1351,7 @@ def admin_repair_inventory_column():
         except Exception as e:
             errors.append(f"{case['case_code']}: {e}")
 
-    return jsonify(ok=True, checked=checked, fixed=fixed, errors=errors)
+    return jsonify(ok=True, checked=checked, fixed=fixed, headers_fixed=headers_fixed, errors=errors)
 
 
 def expected_sheet_name(dt):

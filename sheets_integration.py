@@ -563,6 +563,40 @@ def backfill_documents_status(sheet_id, row_num, has_documents, view_url, add_ur
     ).execute()
 
 
+def ensure_column_headers(sheet_id):
+    """Fills in row 1 (header) labels for O, P, and R if -- and only if
+    -- that header cell is currently blank. Google Sheets shows a
+    generic placeholder like "Column 16" in filter views/etc. whenever
+    a header cell has no text of its own; the app never writes to row 1
+    on its own (only data rows), so a brand-new or duplicated monthly
+    sheet can end up with these three data columns unlabeled even
+    though the app is writing correct data underneath. Never touches a
+    header cell that already has real text in it, in case staff typed
+    something different on purpose."""
+    _ensure_grid_width(sheet_id, 20)
+    service = _get_service()
+    existing = (
+        service.spreadsheets()
+        .values()
+        .get(spreadsheetId=sheet_id, range=_sheet_range("O1:R1"))
+        .execute()
+        .get("values", [[]])
+    )
+    row = existing[0] if existing else []
+    row += [""] * (4 - len(row))  # O, P, Q, R
+    labels = {"O1": "INVENTORY", "P1": "Documents", "R1": "Days in Storage"}
+    updates = []
+    for col, idx in (("O1", 0), ("P1", 1), ("R1", 3)):
+        if not row[idx].strip():
+            updates.append({"range": _sheet_range(col), "values": [[labels[col]]]})
+    if updates:
+        service.spreadsheets().values().batchUpdate(
+            spreadsheetId=sheet_id,
+            body={"valueInputOption": "USER_ENTERED", "data": updates},
+        ).execute()
+    return [u["range"] for u in updates]
+
+
 def backfill_storage_days(sheet_id, row_num, start_date, end_date=None):
     """Writes column R (Days in Storage -- billable time in our care).
     start_date/end_date are datetime.date (or datetime) objects.

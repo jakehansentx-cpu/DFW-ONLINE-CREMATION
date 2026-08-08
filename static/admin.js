@@ -294,7 +294,10 @@ repairInventoryBtn.addEventListener("click", async () => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Repair failed");
     const errorNote = data.errors.length ? ` (${data.errors.length} row(s) couldn't be checked)` : "";
-    repairInventoryStatus.textContent = `Checked ${data.checked} case(s), fixed ${data.fixed}.${errorNote}`;
+    const headerNote = data.headers_fixed && data.headers_fixed.length
+      ? ` Header labels filled in: ${data.headers_fixed.join(", ")}.`
+      : "";
+    repairInventoryStatus.textContent = `Checked ${data.checked} case(s), fixed ${data.fixed}.${headerNote}${errorNote}`;
     repairInventoryStatus.className = "status-msg ok";
   } catch (err) {
     repairInventoryStatus.textContent = err.message;

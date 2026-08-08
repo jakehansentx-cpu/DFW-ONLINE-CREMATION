@@ -53,7 +53,9 @@
       local data and rewrites O, P, and R to match. Safe to run any time -- can take a little
       while if there are a lot of cases. Note: this does not touch column Q (Notes) -- if an
       earlier version of the app left incorrect "Yes" values there, those need clearing by hand
-      since Q also holds real staff notes.
+      since Q also holds real staff notes. Also labels the O/P/R header row (row 1) as
+      INVENTORY / Documents / Days in Storage if a header cell is blank -- fixes a blank header
+      showing as a generic "Column 16"-style placeholder in Sheets.
     </p>
     <button id="repairInventoryBtn" class="primary-btn">Repair Columns O, P &amp; R</button>
     <div id="repairInventoryStatus" class="status-msg"></div>
