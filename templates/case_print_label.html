@@ -6,53 +6,77 @@
 <title>Label — {{ case_code }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 <style>
+  /* Same exact armband tag design as the office-printer page (case_print.html)
+     -- QR on the left, name/funeral home/date stacked on the right, all the
+     same big bold size -- just rotated 90deg so the tag's 3.2in width runs
+     along the 54mm roll's length instead of its (narrower) width. */
   @page { size: 54mm auto; margin: 0; }
 
   .print-toolbar { text-align: center; padding: 16px; }
   .print-toolbar p { color: #889; font-size: 13px; max-width: 320px; margin: 10px auto 0; }
 
-  #nelko-label {
-    width: 54mm;
+  .rotate-wrap {
+    position: relative;
+    width: 1.1in;
+    height: 3.2in;
     margin: 0 auto;
-    padding: 2mm;
-    box-sizing: border-box;
+  }
+  #label {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 3.2in;
+    height: 1.1in;
+    transform-origin: top left;
+    transform: rotate(90deg) translateY(-100%);
+    padding: 0.1in;
     background: #fff;
     color: #14151a;
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1.5mm;
+    align-items: stretch;
+    gap: 0.14in;
+    box-sizing: border-box;
   }
-  #nelko-label .qr-box { width: 42mm; height: 42mm; }
-  #nelko-label .qr-box img { width: 100%; height: 100%; display: block; }
+  #label .qr-box {
+    flex: 0 0 auto;
+    width: 1.1in;
+    height: 1.1in;
+  }
+  #label .qr-box img { width: 100%; height: 100%; display: block; }
+
+  #label .text-block {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.04in;
+    border-left: 1px solid #e4e1d9;
+    padding-left: 0.14in;
+    overflow: hidden; /* lets the auto-fit script below detect vertical overflow via scrollHeight */
+  }
   /* All three lines share one font size, kept in sync by autoFitGroup()
      below -- name, funeral home, and date print equally large and bold,
-     shrinking together (never independently) only when a line is too
-     wide for the 54mm roll. The roll's length is unbounded ("auto" in
-     @page above), so there's no height limit to worry about here. */
-  #nelko-label .line-name,
-  #nelko-label .line-home,
-  #nelko-label .line-date {
+     shrinking together (never independently) only when the text is too
+     long/tall to fit this fixed-size tag. */
+  #label .line-name,
+  #label .line-home,
+  #label .line-date {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
     font-weight: 700;
     text-align: center;
     line-height: 1.15;
-    width: 100%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-size: 16pt;
+    font-size: 22pt;
   }
-  #nelko-label .line-date { color: #4a4d54; }
-  #nelko-label .line-code {
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-weight: 400; font-size: 7pt; text-align: center; color: #6a6d74; margin-top: 1mm;
-  }
+  #label .line-date { color: #4a4d54; }
 
   @media print {
     body * { visibility: hidden; }
-    #nelko-label, #nelko-label * { visibility: visible; }
-    #nelko-label { position: absolute; top: 0; left: 0; }
+    .rotate-wrap, .rotate-wrap * { visibility: visible; }
+    .rotate-wrap { position: absolute; top: 0; left: 0; }
     .print-toolbar { display: none; }
   }
 </style>
@@ -63,30 +87,34 @@
     <p>In the print dialog, choose the NELKO printer. If it asks for a paper/media size, pick 54mm roll (or the closest match).</p>
   </div>
 
-  <div id="nelko-label">
-    <div class="qr-box">
-      <img src="{{ url_for('case_qr_image', case_code=case_code) }}" alt="QR code for {{ case_code }}">
+  <div class="rotate-wrap">
+    <div id="label">
+      <div class="qr-box">
+        <img src="{{ url_for('case_qr_image', case_code=case_code) }}" alt="QR code for {{ case_code }}">
+      </div>
+      <div class="text-block">
+        <div class="line-name">{{ case.name or case_code }}</div>
+        <div class="line-home">{{ case.funeral_home or "" }}</div>
+        <div class="line-date">{{ pickup_date or "" }}</div>
+      </div>
     </div>
-    <div class="line-name">{{ case.name or case_code }}</div>
-    {% if case.funeral_home %}<div class="line-home">{{ case.funeral_home }}</div>{% endif %}
-    {% if pickup_date %}<div class="line-date">{{ pickup_date }}</div>{% endif %}
-    <div class="line-code">{{ case_code }}</div>
   </div>
 
   <script>
     // Name, funeral home, and date all print at the SAME large size --
     // this shrinks them one step at a time, together, until every line
-    // fits the 54mm width. (Never shrinks just one line on its own, so
-    // a long funeral home name can't end up smaller than the others.)
-    // Runs before print so the fitted size is what actually prints.
-    function autoFitGroup(elements, minFontSize) {
-      const lines = elements.filter((el) => el && el.textContent.trim());
-      if (!lines.length) return;
-      let fontSize = parseFloat(getComputedStyle(lines[0]).fontSize);
-      const fits = () => lines.every((el) => el.scrollWidth <= el.clientWidth);
+    // fits its width AND the whole group fits the tag's fixed height.
+    // (Never shrinks just one line on its own, so a long funeral home
+    // name can't end up smaller than the others.) Runs before print so
+    // the fitted size is what actually prints.
+    function autoFitGroup(container, elements, minFontSize) {
+      let fontSize = parseFloat(getComputedStyle(elements[0]).fontSize);
+      const fits = () =>
+        container.scrollHeight <= container.clientHeight &&
+        elements.every((el) => el.scrollWidth <= el.clientWidth);
       while (!fits() && fontSize > minFontSize) {
         fontSize -= 0.25;
-        lines.forEach((el) => (el.style.fontSize = fontSize + "pt"));
+        elements.forEach((el) => (el.style.fontSize = fontSize + "pt"));
       }
       // scrollWidth/clientWidth round to whole pixels, so a genuine
       // sub-pixel overflow can read as "equal" (fits() true) one step
@@ -94,18 +122,17 @@
       // down as a final cushion, as long as there's room above the floor.
       if (fontSize > minFontSize) {
         fontSize -= 0.5;
-        lines.forEach((el) => (el.style.fontSize = fontSize + "pt"));
+        elements.forEach((el) => (el.style.fontSize = fontSize + "pt"));
       }
     }
     window.addEventListener("load", () => {
-      autoFitGroup(
-        [
-          document.querySelector("#nelko-label .line-name"),
-          document.querySelector("#nelko-label .line-home"),
-          document.querySelector("#nelko-label .line-date"),
-        ],
-        7
-      );
+      const textBlock = document.querySelector("#label .text-block");
+      const lines = [
+        document.querySelector("#label .line-name"),
+        document.querySelector("#label .line-home"),
+        document.querySelector("#label .line-date"),
+      ].filter((el) => el && el.textContent.trim());
+      autoFitGroup(textBlock, lines, 7);
     });
   </script>
 </body>

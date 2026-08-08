@@ -1015,10 +1015,11 @@ def _load_font(bold, size):
 def generate_label_image(case_code, name, funeral_home, pickup_date, target_url):
     """
     Composites the full armband tag -- QR on the left, name/funeral
-    home/date stacked on the right -- into a single flat PNG at 300dpi,
-    matching the printable page's layout exactly. Meant for label
-    printers/apps that expect a plain image rather than a browser print
-    dialog.
+    home/date stacked on the right, all the SAME big bold size -- into
+    a single flat PNG at 300dpi, matching the printable pages' layout
+    exactly (see case_print.html/case_print_label.html's autoFitGroup).
+    Meant for label printers/apps that expect a plain image rather than
+    a browser print dialog.
     """
     dpi = 300
     width, height = round(3.2 * dpi), round(1.1 * dpi)
@@ -1040,15 +1041,41 @@ def generate_label_image(case_code, name, funeral_home, pickup_date, target_url)
     draw.line([(line_x, margin), (line_x, height - margin)], fill=(228, 225, 217), width=2)
 
     text_x = line_x + round(0.14 * dpi)
-    draw.text(
-        (text_x, round(0.16 * dpi)), name or case_code, font=_load_font(True, 46), fill=(20, 21, 26)
-    )
-    draw.text(
-        (text_x, round(0.48 * dpi)), funeral_home or "", font=_load_font(False, 30), fill=(51, 54, 61)
-    )
-    draw.text(
-        (text_x, round(0.74 * dpi)), pickup_date or "", font=_load_font(False, 26), fill=(74, 77, 84)
-    )
+    text_area_w = width - margin - text_x
+    text_area_h = height - 2 * margin
+    gap = round(0.04 * dpi)
+
+    lines = [
+        (name or case_code, (20, 21, 26)),
+        (funeral_home or "", (51, 54, 61)),
+        (pickup_date or "", (74, 77, 84)),
+    ]
+    lines = [(text, color) for text, color in lines if text]
+
+    # All three lines share one font size -- shrink together (never
+    # independently), the same as autoFitGroup() in the HTML tag pages,
+    # until every line's width fits and the whole group's height fits.
+    size = 46
+    while size > 14:
+        font = _load_font(True, size)
+        boxes = [draw.textbbox((0, 0), text, font=font) for text, _ in lines]
+        widths = [b[2] - b[0] for b in boxes]
+        heights = [b[3] - b[1] for b in boxes]
+        total_h = sum(heights) + gap * (len(lines) - 1)
+        if (not widths or max(widths) <= text_area_w) and total_h <= text_area_h:
+            break
+        size -= 1
+
+    font = _load_font(True, size)
+    boxes = [draw.textbbox((0, 0), text, font=font) for text, _ in lines]
+    widths = [b[2] - b[0] for b in boxes]
+    heights = [b[3] - b[1] for b in boxes]
+    total_h = sum(heights) + gap * (len(lines) - 1)
+    y = margin + (text_area_h - total_h) // 2
+    for (text, color), w, h, box in zip(lines, widths, heights, boxes):
+        x = text_x + (text_area_w - w) // 2
+        draw.text((x - box[0], y - box[1]), text, font=font, fill=color)
+        y += h + gap
 
     buf = io.BytesIO()
     img.save(buf, format="PNG", dpi=(dpi, dpi))
@@ -2032,11 +2059,11 @@ def case_print_page(case_code):
 @app.route("/case/<case_code>/print-label")
 @login_required
 def case_print_label_page(case_code):
-    """Printable armband tag sized for the NELKO PM230 thermal sticker
-    printer's 54mm roll -- QR code stacked above name/funeral home/date/
-    case code, narrow enough to fit the roll width. Separate from
-    case_print_page's landscape layout, which is sized for a regular
-    office printer instead."""
+    """Printable armband tag for the NELKO PM230 thermal sticker
+    printer's 54mm roll -- same exact QR-left/text-right landscape
+    design as case_print_page's office-printer tag, just rotated 90deg
+    in CSS so the tag's 3.2in width runs along the roll's length
+    instead of its (narrower, 54mm) width."""
     db = get_db()
     row = get_case_with_location(db, case_code)
     if row is None:
