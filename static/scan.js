@@ -492,6 +492,17 @@ async function postJSON(url, body, timeoutMs = 6000) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Request failed");
     return data;
+  } catch (err) {
+    // A timed-out/aborted fetch throws a browser-internal DOMException
+    // ("signal is aborted without reason" or similar) -- meaningless to
+    // staff. The save itself may well have still gone through on the
+    // server; the client just gave up waiting for the response.
+    if (err.name === "AbortError") {
+      throw new Error(
+        "No response after a while -- the save may have still gone through. Check the sheet/board before retrying."
+      );
+    }
+    throw err;
   } finally {
     clearTimeout(timer);
   }
@@ -1210,7 +1221,7 @@ saveInfoBtn.addEventListener("click", async () => {
 
   if (mode === "edit") {
     try {
-      await postJSON(`/api/case/${encodeURIComponent(currentCaseCode)}/info`, body);
+      await postJSON(`/api/case/${encodeURIComponent(currentCaseCode)}/info`, body, 25000);
       currentCaseName = body.name || null;
       infoForm.classList.add("hidden");
       showStatus(`${currentCaseCode} updated.`, true);
@@ -1224,7 +1235,10 @@ saveInfoBtn.addEventListener("click", async () => {
   }
 
   try {
-    await postJSON(`/api/case/${encodeURIComponent(currentCaseCode)}/info`, body);
+    // 25s, not the default 6s -- this now writes removal details, the
+    // case link, and O/P/R defaults to the sheet too (several sequential
+    // Sheets API calls), the same amount of work as sheet-intake save.
+    await postJSON(`/api/case/${encodeURIComponent(currentCaseCode)}/info`, body, 25000);
     currentCaseName = body.name || null;
     showPrintGate(currentCaseCode, nameSuffix(currentCaseName));
   } catch (err) {
