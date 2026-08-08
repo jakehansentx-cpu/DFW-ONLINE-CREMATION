@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inventory Photos — {{ case_code }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<style>
+  .print-toolbar { text-align: center; padding: 16px; }
+  .inv-print-page { max-width: 800px; margin: 0 auto; padding: 0 16px; color: #14151a; background: #fff; }
+  .inv-print-header { text-align: center; margin-bottom: 24px; }
+  .inv-print-header h1 { font-size: 18pt; margin: 0 0 4px; }
+  .inv-print-header .meta { font-size: 11pt; color: #444; }
+  .inv-print-item {
+    display: flex; gap: 16px; align-items: flex-start;
+    padding: 16px 0; border-bottom: 1px solid #ccc;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  .inv-print-item img {
+    width: 3in; max-width: 45%; height: auto; border: 1px solid #999; flex-shrink: 0;
+  }
+  .inv-print-item .caption { font-size: 11pt; line-height: 1.5; }
+  .inv-print-empty { text-align: center; color: #667; padding: 40px 0; }
+
+  @media print {
+    body { background: #fff; }
+    .print-toolbar { display: none; }
+  }
+</style>
+</head>
+<body class="scan-body" style="background:#fff;">
+  <div class="print-toolbar">
+    <button class="primary-btn" onclick="window.print()">Print (Office Printer)</button>
+  </div>
+
+  <div class="inv-print-page">
+    <div class="inv-print-header">
+      <h1>Inventory Photos</h1>
+      <div class="meta">
+        Case {{ case_code }}{% if case.name %} — {{ case.name }}{% endif %}<br>
+        {% if case.funeral_home %}{{ case.funeral_home }}<br>{% endif %}
+        Printed {{ items | length }} photo{{ "s" if items | length != 1 else "" }}
+      </div>
+    </div>
+
+    {% if items %}
+      {% for item in items %}
+        <div class="inv-print-item">
+          <img src="{{ url_for('inventory_photo', item_id=item.id) }}" alt="">
+          <div class="caption">
+            <div>{{ item.description or "(photo only)" }}</div>
+            <div>{{ item.when }}{% if item.staff %} — {{ item.staff }}{% endif %}</div>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="inv-print-empty">No inventory photos logged for this case.</p>
+    {% endif %}
+  </div>
+</body>
+</html>

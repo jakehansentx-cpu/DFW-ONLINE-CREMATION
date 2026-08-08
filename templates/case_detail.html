@@ -46,6 +46,10 @@
       </div>
     {% else %}
       <div class="info-form" style="display:block;">
+        <div class="case-qr-row">
+          <img class="case-qr-thumb" src="{{ url_for('case_qr_image', case_code=case_code) }}" alt="QR code for {{ case_code }}">
+          <p class="case-line"><b>Case:</b> {{ case_code }}</p>
+        </div>
         <label>Name</label>
         <div style="padding:8px 0; font-size:18px;">{{ case.name or "—" }}</div>
         <label>Funeral Home</label>
@@ -82,7 +86,8 @@
           {% for item in inventory %}
             <div class="inventory-row">
               {% if item.has_photo %}
-                <img class="inventory-thumb" src="{{ url_for('inventory_photo', item_id=item.id) }}" alt="">
+                <img class="inventory-thumb" src="{{ url_for('inventory_photo', item_id=item.id) }}" alt=""
+                     onclick="openPhotoLightbox(this.src)">
               {% endif %}
               <div class="inventory-info">
                 <div>{{ item.description or "(photo only)" }}</div>
@@ -91,6 +96,9 @@
             </div>
           {% endfor %}
         </div>
+        {% if inventory | selectattr("has_photo") | list %}
+          <a class="secondary-btn" href="{{ url_for('case_print_inventory_page', case_code=case_code) }}" target="_blank" rel="noopener" style="display:block; text-decoration:none; text-align:center; margin-top:14px;">🖨️ Print All Photos (Office Printer)</a>
+        {% endif %}
       </div>
     {% endif %}
 
@@ -108,5 +116,23 @@
       </div>
     {% endif %}
   </div>
+
+  <div id="photoLightbox" class="detail-overlay hidden" onclick="if (event.target === this) closePhotoLightbox()">
+    <button class="close-btn" onclick="closePhotoLightbox()">&times;</button>
+    <img id="photoLightboxImg" src="" alt="" style="max-width:92vw; max-height:88vh; border-radius:8px;">
+  </div>
+  <script>
+    function openPhotoLightbox(src) {
+      document.getElementById("photoLightboxImg").src = src;
+      document.getElementById("photoLightbox").classList.remove("hidden");
+    }
+    function closePhotoLightbox() {
+      document.getElementById("photoLightbox").classList.add("hidden");
+      document.getElementById("photoLightboxImg").src = "";
+    }
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closePhotoLightbox();
+    });
+  </script>
 </body>
 </html>

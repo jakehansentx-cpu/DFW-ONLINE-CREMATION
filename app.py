@@ -1908,6 +1908,26 @@ def case_print_label_page(case_code):
     )
 
 
+@app.route("/case/<case_code>/print-inventory")
+@login_required
+def case_print_inventory_page(case_code):
+    """Printable page of every inventory photo logged for this case, for
+    a staff member to keep with the file or hand over alongside the
+    decedent's property. Office printer only -- there's no label-printer
+    equivalent, since these are full photos, not a small tag."""
+    db = get_db()
+    case = db.execute("SELECT * FROM cases WHERE case_code = ?", (case_code,)).fetchone()
+    if case is None:
+        return jsonify(error="Unknown case code"), 404
+    items = [i for i in get_inventory_items(db, case["id"]) if i["has_photo"]]
+    return render_template(
+        "case_print_inventory.html",
+        case=case,
+        case_code=case_code,
+        items=items,
+    )
+
+
 def _cremation_tag_data(db, row):
     """Pickup date (falling back to created_at) and the date this case's
     current shelf was reached -- shared by the printable page and the
