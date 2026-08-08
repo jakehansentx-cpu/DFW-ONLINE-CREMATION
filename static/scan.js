@@ -28,6 +28,7 @@ const printLabelLink = document.getElementById("printLabelLink");
 const printGate = document.getElementById("printGate");
 const printGateBtn = document.getElementById("printGateBtn");
 const printLabelGateBtn = document.getElementById("printLabelGateBtn");
+const printGateSkipBtn = document.getElementById("printGateSkipBtn");
 const releaseForm = document.getElementById("releaseForm");
 const releaseFormTitle = document.getElementById("releaseFormTitle");
 const releasedTo = document.getElementById("releasedTo");
@@ -355,18 +356,19 @@ function resetFlow() {
   if (mode === "smart" || mode === "assign-location") startCamera();
 }
 
-// After decedent info is saved, the tag has to actually get printed before
-// the flow moves on to placing the decedent -- this screen forces that
-// step to happen instead of leaving it as something easy to forget.
-// Continuing is gated behind the print button's own click handler below,
-// not a separate "Continue" button, so there's only one thing to press.
+// After decedent info is saved on a case reached by scanning an EXISTING
+// physical tag (Assign to Shelf, or editing a blank tag's info) -- that
+// scan already proved a scannable tag is on the decedent, so printing a
+// new one here is optional, not required. Staff can skip straight to
+// placing them (printGateSkipBtn) or print a spare/replacement copy
+// (either printer button, which also continues once clicked).
 function showPrintGate(code, nameTag) {
   infoForm.classList.add("hidden");
   printGate.classList.remove("hidden");
   printGateBtn.href = `/case/${encodeURIComponent(code)}/print`;
   printLabelGateBtn.href = `/case/${encodeURIComponent(code)}/print-label`;
-  stepLabel.textContent = `Print the armband tag for ${code}${nameTag}`;
-  showStatus("Saved. Print the armband tag to continue.", true);
+  stepLabel.textContent = `Print the armband tag for ${code}${nameTag}, or continue if it's already printed`;
+  showStatus("Saved. Print a tag or continue to placing the decedent.", true);
 }
 
 // Either printer works to satisfy the "print before placing" gate --
@@ -381,6 +383,7 @@ function advancePastPrintGate() {
 }
 printGateBtn.addEventListener("click", advancePastPrintGate);
 printLabelGateBtn.addEventListener("click", advancePastPrintGate);
+printGateSkipBtn.addEventListener("click", advancePastPrintGate);
 
 // Decedent Information (sheet-intake) alternative to the print gate --
 // for staff who hand-write the decedent's info onto a pre-printed blank
