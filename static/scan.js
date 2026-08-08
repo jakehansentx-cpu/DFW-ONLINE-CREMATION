@@ -189,6 +189,12 @@ let currentCaseCode = null;
 let currentCaseName = null;
 let currentSheetRow = null;
 let pendingConfirmAction = null;
+// Set while staff is choosing WHICH decedent to place at a shelf they've
+// already scanned (see showPlaceAtLocationPicker) -- the location code
+// this is set to. Checked at the very top of processScannedCode so the
+// next scan is interpreted as "the decedent to place here" no matter
+// what mode is otherwise active.
+let placeAtLocationCode = null;
 // True for the rest of a single action started from a smart-scan
 // contextual button (e.g. tapping "Move to New Location" after scanning
 // an armband) -- those are one-off actions, so completing one should
@@ -260,6 +266,7 @@ function resetFlow() {
   documentsPanel.classList.add("hidden");
   smartResult.classList.add("hidden");
   smartResult.innerHTML = "";
+  placeAtLocationCode = null;
   quickPrintPanel.classList.add("hidden");
   confirmBox.classList.add("hidden");
   pendingConfirmAction = null;
@@ -306,9 +313,10 @@ function resetFlow() {
   if (mode === "documents") stepLabel.textContent = "Scan the Case ID to add a document";
   if (mode === "print") stepLabel.textContent = "Scan the Case ID tag to print";
   if (mode === "smart" || mode === "edit") stepLabel.textContent = "Scan any QR code -- armband, shelf, or blank tag";
+  if (mode === "assign-location") stepLabel.textContent = "Scan the shelf location to place a decedent";
   scanInput.value = "";
 
-  if (mode === "smart") startCamera();
+  if (mode === "smart" || mode === "assign-location") startCamera();
 }
 
 // After decedent info is saved, the tag has to actually get printed before
@@ -460,8 +468,12 @@ scanInput.addEventListener("keydown", async (e) => {
 
 async function processScannedCode(code) {
   try {
-    if (mode === "smart") {
+    if (placeAtLocationCode) {
+      await handlePlaceAtLocationScan(code);
+    } else if (mode === "smart") {
       await handleSmartScan(code);
+    } else if (mode === "assign-location") {
+      await handleAssignLocationScan(code);
     } else if (mode === "print") {
       await handlePrintScan(code);
     } else if (step === "case") {
@@ -671,6 +683,9 @@ async function handleSmartLocationScan(locationCode) {
     smartResult.innerHTML = `
       <h3 style="margin-top:0;">${escapeHtmlLocal(where)}</h3>
       <p style="color:#889;">Empty.</p>
+      <div class="smart-actions">
+        <button id="placeHereBtn">📍 Move Decedent to This Shelf</button>
+      </div>
       <button id="smartBackBtn" class="secondary-btn" style="margin-top:14px;">🏠 Back to Home</button>`;
   } else {
     const blocks = data.occupants
@@ -692,7 +707,124 @@ async function handleSmartLocationScan(locationCode) {
   }
   smartResult.classList.remove("hidden");
   wireSmartResultButtons(null);
+  const placeHereBtn = document.getElementById("placeHereBtn");
+  if (placeHereBtn) {
+    placeHereBtn.addEventListener("click", () => showPlaceAtLocationPicker(locationCode, where));
+  }
   showStatus(`${where} scanned.`, true);
+}
+
+// After scanning an empty shelf, staff pick which decedent goes there
+// either by searching (name/case number) or by scanning that decedent's
+// own tag next -- see placeAtLocationCode/handlePlaceAtLocationScan.
+function showPlaceAtLocationPicker(locationCode, where) {
+  placeAtLocationCode = locationCode;
+  smartResult.innerHTML = `
+    <h3 style="margin-top:0;">Place a Decedent at ${escapeHtmlLocal(where)}</h3>
+    <label style="display:block; color:#aab; font-size:14px; margin-top:6px;">Search by Name or Case Number</label>
+    <input id="placeSearchInput" type="text" placeholder="Start typing..." autocomplete="off"
+           style="width:100%; font-size:18px; padding:10px; margin-top:4px; border-radius:6px; border:1px solid #333; background:#0d1116; color:#fff;">
+    <div id="placeSearchResults" class="inventory-list" style="margin-top:12px;"></div>
+    <button id="placeScanInsteadBtn" class="camera-btn" style="margin-top:14px;">📷 Or Scan the Decedent's Tag Instead</button>
+    <button id="placeCancelBtn" class="secondary-btn" style="margin-top:10px;">🏠 Back to Home</button>`;
+  smartResult.classList.remove("hidden");
+
+  const searchInput = document.getElementById("placeSearchInput");
+  const searchResults = document.getElementById("placeSearchResults");
+  let placeDebounceTimer = null;
+  searchInput.addEventListener("input", () => {
+    clearTimeout(placeDebounceTimer);
+    const q = searchInput.value.trim();
+    if (!q) {
+      searchResults.innerHTML = "";
+      return;
+    }
+    placeDebounceTimer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/cases/search?q=${encodeURIComponent(q)}`);
+        const matches = (await res.json()).filter(
+          (m) => m.status === "pending_location" || m.status === "placed"
+        );
+        renderPlaceSearchResults(matches, searchResults);
+      } catch (err) {
+        searchResults.innerHTML = `<p class="status-msg err" style="margin:0;">${escapeHtmlLocal(err.message)}</p>`;
+      }
+    }, 250);
+  });
+  searchInput.focus();
+
+  document.getElementById("placeScanInsteadBtn").addEventListener("click", () => {
+    showStatus(`Scan the decedent's tag to place at ${where}.`, true);
+    startCamera();
+  });
+  document.getElementById("placeCancelBtn").addEventListener("click", () => {
+    placeAtLocationCode = null;
+    setMode("home");
+  });
+}
+
+function renderPlaceSearchResults(matches, container) {
+  if (matches.length === 0) {
+    container.innerHTML = `<p style="color:#889; margin:0;">No matches awaiting placement or already placed elsewhere.</p>`;
+    return;
+  }
+  container.innerHTML = matches
+    .map(
+      (m) => `
+      <div class="inventory-row">
+        <div class="inventory-info">
+          <div><b>${escapeHtmlLocal(m.name || m.case_code)}</b></div>
+          <div style="color:#889; font-size:12.5px;">${escapeHtmlLocal(m.case_code)}${m.funeral_home ? " — " + escapeHtmlLocal(m.funeral_home) : ""} — ${m.status === "placed" ? "currently placed" : "awaiting placement"}</div>
+        </div>
+        <button class="place-select-btn" data-case="${escapeHtmlLocal(m.case_code)}" style="padding:8px 14px; background:#2a5d8a; color:#fff; border:none; border-radius:6px;">Select</button>
+      </div>`
+    )
+    .join("");
+  container.querySelectorAll(".place-select-btn").forEach((btn) => {
+    btn.addEventListener("click", () => placeCaseAtLocation(btn.dataset.case));
+  });
+}
+
+async function handlePlaceAtLocationScan(rawCode) {
+  const code = normalizeCaseCode(rawCode);
+  if (!code) {
+    showStatus("That doesn't look like a decedent's tag. Scan the tag you want to place here.", false);
+    return;
+  }
+  await placeCaseAtLocation(code);
+}
+
+async function placeCaseAtLocation(code) {
+  const locationCode = placeAtLocationCode;
+  if (!locationCode) return;
+  try {
+    const caseData = await postJSON("/api/case/lookup", { case_code: code });
+    if (caseData.status !== "pending_location" && caseData.status !== "placed") {
+      showStatus(`${caseData.case_code} can't be placed right now (status: ${caseData.status}).`, false);
+      return;
+    }
+    const endpoint = caseData.status === "placed" ? "/api/move" : "/api/assign";
+    const result = await postJSON(endpoint, {
+      case_code: caseData.case_code,
+      location_code: locationCode,
+      staff: getStaffName(),
+    });
+    const warning = result.sheet_warning ? ` (${result.sheet_warning})` : "";
+    placeAtLocationCode = null;
+    stopCamera();
+    showStatus(`${caseData.case_code}${nameSuffix(caseData.name)} placed at ${locationCode}.${warning}`, !result.sheet_warning);
+    setMode("home");
+  } catch (err) {
+    showStatus(err.message, false);
+  }
+}
+
+async function handleAssignLocationScan(rawCode) {
+  if (!rawCode.startsWith("LOC|")) {
+    showStatus("That doesn't look like a shelf/location tag. Scan a shelf QR code.", false);
+    return;
+  }
+  await handleSmartLocationScan(rawCode);
 }
 
 async function handleSmartCaseScan(code) {
