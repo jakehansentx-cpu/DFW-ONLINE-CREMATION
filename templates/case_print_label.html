@@ -25,20 +25,25 @@
   }
   #nelko-label .qr-box { width: 42mm; height: 42mm; }
   #nelko-label .qr-box img { width: 100%; height: 100%; display: block; }
+  /* All three lines share one font size, kept in sync by autoFitGroup()
+     below -- name, funeral home, and date print equally large and bold,
+     shrinking together (never independently) only when a line is too
+     wide for the 54mm roll. The roll's length is unbounded ("auto" in
+     @page above), so there's no height limit to worry about here. */
   #nelko-label .line-name,
   #nelko-label .line-home,
   #nelko-label .line-date {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
     font-weight: 700;
     text-align: center;
+    line-height: 1.15;
     width: 100%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-size: 16pt;
   }
-  #nelko-label .line-name { font-size: 12pt; line-height: 1.15; }
-  #nelko-label .line-home { font-size: 9pt; line-height: 1.15; }
-  #nelko-label .line-date { font-size: 8pt; color: #4a4d54; }
+  #nelko-label .line-date { color: #4a4d54; }
   #nelko-label .line-code {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
     font-weight: 400; font-size: 7pt; text-align: center; color: #6a6d74; margin-top: 1mm;
@@ -69,22 +74,38 @@
   </div>
 
   <script>
-    // Shrinks each line's font size (down to a readable floor) until it
-    // fits on one line, instead of ellipsis-truncating a long name/
-    // funeral home -- runs before print so the fitted size is what
-    // actually prints.
-    function autoFitLine(el, minFontSize) {
-      if (!el) return;
-      let fontSize = parseFloat(getComputedStyle(el).fontSize);
-      while (el.scrollWidth > el.clientWidth && fontSize > minFontSize) {
+    // Name, funeral home, and date all print at the SAME large size --
+    // this shrinks them one step at a time, together, until every line
+    // fits the 54mm width. (Never shrinks just one line on its own, so
+    // a long funeral home name can't end up smaller than the others.)
+    // Runs before print so the fitted size is what actually prints.
+    function autoFitGroup(elements, minFontSize) {
+      const lines = elements.filter((el) => el && el.textContent.trim());
+      if (!lines.length) return;
+      let fontSize = parseFloat(getComputedStyle(lines[0]).fontSize);
+      const fits = () => lines.every((el) => el.scrollWidth <= el.clientWidth);
+      while (!fits() && fontSize > minFontSize) {
+        fontSize -= 0.25;
+        lines.forEach((el) => (el.style.fontSize = fontSize + "pt"));
+      }
+      // scrollWidth/clientWidth round to whole pixels, so a genuine
+      // sub-pixel overflow can read as "equal" (fits() true) one step
+      // before it actually is -- take one extra guaranteed-safe step
+      // down as a final cushion, as long as there's room above the floor.
+      if (fontSize > minFontSize) {
         fontSize -= 0.5;
-        el.style.fontSize = fontSize + "pt";
+        lines.forEach((el) => (el.style.fontSize = fontSize + "pt"));
       }
     }
     window.addEventListener("load", () => {
-      autoFitLine(document.querySelector("#nelko-label .line-name"), 7);
-      autoFitLine(document.querySelector("#nelko-label .line-home"), 6);
-      autoFitLine(document.querySelector("#nelko-label .line-date"), 6);
+      autoFitGroup(
+        [
+          document.querySelector("#nelko-label .line-name"),
+          document.querySelector("#nelko-label .line-home"),
+          document.querySelector("#nelko-label .line-date"),
+        ],
+        7
+      );
     });
   </script>
 </body>
