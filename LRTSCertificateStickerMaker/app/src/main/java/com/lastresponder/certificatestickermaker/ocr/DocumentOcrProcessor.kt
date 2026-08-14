@@ -42,10 +42,14 @@ object DocumentOcrProcessor {
         return best ?: OcrResult(0, "")
     }
 
+    // Matches "BURIAL TRANSIT" or "BURIAL-TRANSIT" - real Texas DSHS Burial-Transit Permit
+    // forms print it with a space ("BURIAL TRANSIT PERMIT"), not a hyphen.
+    private val BURIAL_TRANSIT = Regex("BURIAL[\\s-]+TRANSIT")
+
     private fun score(text: String, documentType: DocumentType): Double {
         val upper = text.uppercase()
         return if (documentType == DocumentType.BTP) {
-            (if ("BURIAL-TRANSIT" in upper) 8.0 else 0.0) +
+            (if (BURIAL_TRANSIT.containsMatchIn(upper)) 8.0 else 0.0) +
                 (if ("NAME OF DECEASED" in upper) 5.0 else 0.0) +
                 (if ("CREMATION" in upper) 3.0 else 0.0) +
                 minOf(text.length / 300.0, 5.0)
