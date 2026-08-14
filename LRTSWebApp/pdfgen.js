@@ -147,14 +147,36 @@ function labelOrigin(position) {
   return [x, y];
 }
 
+// Groups cases by funeral home before packing them onto sheets, so a batch
+// with several funeral homes prints each one's stickers together on
+// contiguous positions/sheets rather than interleaved in whatever order
+// they were entered. Groups appear in first-seen order (whichever funeral
+// home's first case was added earliest in the batch comes first); case
+// order within a group is preserved.
+function groupCasesByProfile(cases) {
+  const groupOrder = [];
+  const groups = new Map();
+  for (const c of cases) {
+    const key = (c.profile && c.profile.id) || c.profileId || "unknown";
+    if (!groups.has(key)) {
+      groups.set(key, []);
+      groupOrder.push(key);
+    }
+    groups.get(key).push(c);
+  }
+  return groupOrder.flatMap((key) => groups.get(key));
+}
+
 // One placement (page index, x, y) per label, across every case in the
-// batch, packed continuously across sheets - the whole point of the batch
-// print run: nobody has to babysit one case's sheet at a time.
+// batch, packed continuously across sheets and grouped by funeral home -
+// the whole point of the batch print run: nobody has to babysit one case's
+// sheet at a time, or hand-sort stickers by funeral home afterward.
 function computeBatchPlacements(cases) {
+  const ordered = groupCasesByProfile(cases);
   const placements = [];
   let position = 1; // 1-6, wraps to a new page after 6
   let pageIndex = 0;
-  for (const c of cases) {
+  for (const c of ordered) {
     const qty = clampQuantity(c.labelQuantity);
     for (let i = 0; i < qty; i++) {
       const [x, y] = labelOrigin(position);
