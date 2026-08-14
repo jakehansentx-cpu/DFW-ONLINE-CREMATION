@@ -7,20 +7,27 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.lastresponder.certificatestickermaker.domain.BtpNameExtraction
+import com.lastresponder.certificatestickermaker.ocr.OcrResult
 import com.lastresponder.certificatestickermaker.ui.components.LrtsTopBar
 import com.lastresponder.certificatestickermaker.ui.components.MatchBanner
 import com.lastresponder.certificatestickermaker.ui.components.SectionCard
@@ -65,6 +72,7 @@ fun OcrReviewScreen(
                     label = { Text("BTP legal name") },
                     modifier = Modifier.fillMaxWidth()
                 )
+                RawOcrTextPanel("Show extracted BTP text", state.btpOcrResult)
             }
 
             SectionCard {
@@ -85,6 +93,7 @@ fun OcrReviewScreen(
                     label = { Text("Cremation-log name") },
                     modifier = Modifier.fillMaxWidth()
                 )
+                RawOcrTextPanel("Show extracted log text", state.logOcrResult)
             }
 
             SectionCard {
@@ -112,6 +121,36 @@ fun OcrReviewScreen(
             }
 
             Button(onClick = onNext, modifier = Modifier.fillMaxWidth()) { Text("Continue to required verification") }
+        }
+    }
+}
+
+/**
+ * Shows the raw text the on-device recognizer actually read off the photo,
+ * so staff (and developers) can tell whether a bad field came from OCR
+ * misreading the photo or from the field-extraction rules misreading
+ * correctly-recognized text. Mirrors the source mock's collapsible
+ * "Show extracted OCR text" panel.
+ */
+@Composable
+private fun RawOcrTextPanel(label: String, result: OcrResult?) {
+    var expanded by remember { mutableStateOf(false) }
+    TextButton(onClick = { expanded = !expanded }) {
+        Text(if (expanded) "Hide extracted text" else label)
+    }
+    if (expanded) {
+        val text = result?.rawText
+        if (text.isNullOrBlank()) {
+            Text("No text was recognized on this photo.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            Text(
+                "Rotation used: ${result.rotationDegrees}°",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            SelectionContainer {
+                Text(text, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium)
+            }
         }
     }
 }
