@@ -19,11 +19,32 @@ object LogExtraction {
     private val LOG_DATE = Regex("""\b\d{1,2}[\-/.]\d{1,2}(?:[\-/.]\d{2,4})?\b""")
     private val SHORT_DATE = Regex("""^(\d{1,2})[\-/.](\d{1,2})$""")
 
+    // Spreadsheet/browser interface vocabulary that photographing a live app window
+    // (instead of a printed log page) can pick up - these superficially match the
+    // same "Capitalized Word Capitalized Word" shape as a real name, so a candidate
+    // line built entirely from these words is rejected as UI chrome, not a row.
+    private val UI_CHROME_WORDS = setOf(
+        "HOME", "INSERT", "DRAW", "PAGE", "LAYOUT", "FORMULAS", "DATA", "REVIEW", "VIEW",
+        "AUTOMATE", "HELP", "ACROBAT", "AUTOSAVE", "UPGRADE", "YOUR", "PLAN", "SEARCH",
+        "WINDOWS", "WINDOW", "NAVIGATION", "FORMULA", "BAR", "FOCUS", "CELL", "SHOW",
+        "RULER", "GRIDLINES", "SWITCH", "MODES", "MODE", "DARK", "MACROS", "ZOOM",
+        "SHEET", "VIEWS", "SYSTEM", "WORKBOOK", "DISPLAY", "SETTINGS", "ACCESSIBILITY",
+        "EDIT", "GOOD", "ARRANGE", "ALL", "SELECTION", "TYPE", "CREMATION", "LOG",
+        "SAVED", "SHARE", "COMMENTS", "ORGANIZE", "FILE"
+    )
+
+    private fun isUiChromeLine(candidateWords: String): Boolean {
+        val tokens = candidateWords.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
+        if (tokens.isEmpty()) return false
+        return tokens.all { it.uppercase().trim('\'', '-') in UI_CHROME_WORDS }
+    }
+
     fun extractLogName(text: String): String {
         val lines = text.lines().map { TextNormalization.cleanText(it) }.filter { it.isNotEmpty() }
         for (line in lines) {
             if (SKIP_HEADER.containsMatchIn(line)) continue
             val match = NAME_LINE.find(line) ?: continue
+            if (isUiChromeLine(match.groupValues[1])) continue
             return TextNormalization.displayName(match.groupValues[1])
         }
         return ""
@@ -74,6 +95,7 @@ object LogExtraction {
         for (line in lines) {
             if (SKIP_HEADER.containsMatchIn(line)) continue
             val match = NAME_LINE.find(line) ?: continue
+            if (isUiChromeLine(match.groupValues[1])) continue
             val name = TextNormalization.displayName(match.groupValues[1])
             rows.add(LogRowCandidate(name, extractLogDate(line), extractLogDisc(line), line))
         }

@@ -16,8 +16,48 @@ object BtpNameExtraction {
     private val TWO_WORD_NAME = Regex("\\b([A-Z][A-Z'\\-]{2,})\\s+([A-Z][A-Z'\\-]{2,})\\b")
     private val EXCLUDE_TWO_WORD = Regex("(?i)BURIAL|TRANSIT|PERMIT|TEXAS|CREMATION")
 
+    private val COLUMN_LABEL_WORDS = setOf(
+        "FIRST", "MIDDLE", "LAST", "AGE", "SEX", "DATE", "METHOD", "PLACE", "NAME",
+        "STATE", "COUNTY", "REGISTRAR", "TEXAS", "PRACTICE", "FORM", "TEST", "OF", "DECEASED"
+    )
+
+    private fun looksLikeNameToken(text: String): Boolean {
+        val cleaned = text.trim()
+        if (cleaned.length < 2 || cleaned.length > 24) return false
+        if (!cleaned.all { it.isLetter() || it == ' ' || it == '\'' || it == '-' }) return false
+        return cleaned.uppercase() !in COLUMN_LABEL_WORDS
+    }
+
+    private fun valueAfterLabel(lines: List<String>, isLabel: (String) -> Boolean): String? {
+        val labelIndex = lines.indexOfFirst(isLabel)
+        if (labelIndex == -1) return null
+        for (i in (labelIndex + 1) until minOf(labelIndex + 3, lines.size)) {
+            if (looksLikeNameToken(lines[i])) return lines[i]
+        }
+        return null
+    }
+
+    /**
+     * Handles the real Texas DSHS form layout, where "Name of Deceased" is
+     * three separate First/Middle/Last table columns rather than one inline
+     * value. On-device OCR does not always read a multi-column table in
+     * strict top-to-bottom order, so each label is searched independently
+     * anywhere in the recognized text instead of assuming they appear
+     * sequentially. A column whose label was never recognized (this happens
+     * in practice for "Last" on some captures) is simply left out rather
+     * than guessed at - nothing here is invented.
+     */
+    private fun extractTableColumnName(lines: List<String>): String? {
+        val first = valueAfterLabel(lines) { it.uppercase().contains("NAME OF DECEASED") }
+        val middle = valueAfterLabel(lines) { it.trim().equals("MIDDLE", ignoreCase = true) }
+        val last = valueAfterLabel(lines) { it.trim().equals("LAST", ignoreCase = true) }
+        val parts = listOfNotNull(first, middle, last).filter { it.isNotBlank() }
+        return if (parts.size >= 2) parts.joinToString(" ") else null
+    }
+
     fun extractBtpName(text: String): String {
         val lines = text.lines().map { TextNormalization.cleanText(it) }.filter { it.isNotEmpty() }
+        extractTableColumnName(lines)?.let { return TextNormalization.displayName(it) }
         for (index in lines.indices) {
             val line = lines[index]
             if (!line.uppercase().contains("NAME OF DECEASED")) continue

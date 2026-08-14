@@ -63,4 +63,32 @@ class LogExtractionTest {
         val rows = LogExtraction.extractLogRows("Hansen, Jake  08/10/2026  60214")
         assertEquals(1, rows.size)
     }
+
+    @Test
+    fun `real device photo -- spreadsheet app chrome is not mistaken for a decedent name`() {
+        // Mirrors an actual on-device ML Kit read of a photographed (not printed)
+        // Excel window: ribbon tabs, menu labels, and app UI text all superficially
+        // match the "Capitalized Word Capitalized Word" name shape.
+        val text = """
+            Upgrade your plan
+            CREMATION LOG 2026 Saved
+            AutoSave On
+            Page Layout Formulas Data Review View Automate Help Acrobat
+            Switch Windows
+            DECEASED NAME DATE I.D. DISC # FUNERAL HOME
+            Jake Hansen
+            8/13/2026
+            18339
+            All Texas Cremation
+        """.trimIndent()
+        val rows = LogExtraction.extractLogRows(text)
+        assertTrue("chrome text must not appear as a row", rows.none { it.name in setOf("Upgrade Your", "Page Layout", "Switch Windows") })
+        assertTrue("the real decedent name must still be found", rows.any { it.name == "Jake Hansen" })
+    }
+
+    @Test
+    fun `extractLogName also skips app chrome when picking the single best guess`() {
+        val text = "Upgrade your plan\nDark Mode\nJake Hansen\n8/13/2026\n18339"
+        assertEquals("Jake Hansen", LogExtraction.extractLogName(text))
+    }
 }

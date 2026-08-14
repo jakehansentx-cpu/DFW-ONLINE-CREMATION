@@ -35,6 +35,42 @@ class BtpNameExtractionTest {
     }
 
     @Test
+    fun `real device photo -- three-column First-Middle-Last table with jumbled OCR block order`() {
+        // Mirrors an actual on-device ML Kit read of a Texas DSHS Burial-Transit
+        // Permit: First appears right after its label, but Middle's label/value
+        // pair is recognized much later in the block order, and Last's label is
+        // never recognized at all (its value appears with no anchor).
+        val text = """
+            STATE OF TEXAS PRACTICE FORM
+            Burial Transit Permit
+            NAME OF DECEASED FIRST
+            JAKE
+            AGE
+            41 Years
+            PLACE OF DEATH
+            Test Medical Center, Dallas
+            SIGNATURE OF REGISTRAR
+            MIDDLE
+            WILLIAM
+            PACEMAKER Yes No
+            DATE OF DEATH
+            01/01/2026
+            HANSEN
+            METHOD OF DISPOSITION
+        """.trimIndent()
+        // Last has no recognized label anchor, so only First + Middle are combined -
+        // this is a real improvement over returning just "Jake", not a claim of
+        // full accuracy; the surname still needs manual correction on this capture.
+        assertEquals("Jake William", BtpNameExtraction.extractBtpName(text))
+    }
+
+    @Test
+    fun `table extraction is skipped entirely when no column labels are found`() {
+        val text = "BURIAL-TRANSIT PERMIT\nJAKE HANSEN\nCREMATION AUTHORIZED"
+        assertEquals("Jake Hansen", BtpNameExtraction.extractBtpName(text))
+    }
+
+    @Test
     fun `splitLegalName separates first, middle, last, and suffix`() {
         val name = BtpNameExtraction.splitLegalName("Jake Robert Hansen Jr")
         assertEquals("Jake", name.first)
