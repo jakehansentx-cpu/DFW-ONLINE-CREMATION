@@ -178,6 +178,31 @@ class BtpNameExtractionTest {
     }
 
     @Test
+    fun `real device bug -- the label's own text is never mistaken for a value even when it is the closest candidate`() {
+        // Mirrors an actual on-device read: "Middle"'s real value ("William")
+        // was not recognized in this capture, and a garbled repeat of the
+        // header label itself ("Name Of Deceased - Arst", an OCR misread of
+        // "Name of Deceased - First") ended up closest to the Middle label by
+        // position. The old check only rejected a candidate that was an EXACT
+        // match to a single label word, so this multi-word phrase - which
+        // contains "Name", "Of", and "Deceased" as separate words - slipped
+        // through and was returned as a fabricated middle name.
+        val lines = listOf(
+            line("NAME OF DECEASED - FIRST", x = 20, y = 100, w = 320),
+            line("MIDDLE", x = 380, y = 100, w = 80),
+            line("LAST", x = 500, y = 100, w = 60),
+            line("JAKE", x = 20, y = 160, w = 70),
+            // The decoy: a misread repeat of the header, positioned closer to
+            // MIDDLE than the (missing) real value would have been.
+            line("Name Of Deceased - Arst", x = 380, y = 165, w = 260),
+            line("HANSEN", x = 500, y = 160, w = 90)
+        )
+        // Middle's real value was never recognized, so it is correctly left
+        // out - not filled with the label's own garbled text.
+        assertEquals("Jake Hansen", BtpNameExtraction.extractBtpName(lines))
+    }
+
+    @Test
     fun `positional entry point falls back to text heuristics when there is no table`() {
         val lines = listOf(
             line("STATE OF TEXAS BURIAL-TRANSIT PERMIT", x = 0, y = 0),

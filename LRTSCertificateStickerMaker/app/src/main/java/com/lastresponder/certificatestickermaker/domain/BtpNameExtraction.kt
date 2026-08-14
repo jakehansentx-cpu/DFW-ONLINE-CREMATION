@@ -25,7 +25,14 @@ object BtpNameExtraction {
         val cleaned = text.trim()
         if (cleaned.length < 2 || cleaned.length > 24) return false
         if (!cleaned.all { it.isLetter() || it == ' ' || it == '\'' || it == '-' }) return false
-        return cleaned.uppercase() !in COLUMN_LABEL_WORDS
+        // Checking the whole string against COLUMN_LABEL_WORDS only ever caught a
+        // candidate that was one of those words alone. A multi-word OCR line that
+        // repeats or half-reads a label - "Name Of Deceased - Arst" (a misread of
+        // "Name of Deceased - First") - is not an exact match to any single entry
+        // but is still obviously not a name, so every word in it is checked.
+        val words = cleaned.split(Regex("[\\s-]+")).filter { it.isNotBlank() }
+        if (words.isEmpty()) return false
+        return words.none { it.uppercase() in COLUMN_LABEL_WORDS }
     }
 
     private fun valueAfterLabel(lines: List<String>, isLabel: (String) -> Boolean): String? {
