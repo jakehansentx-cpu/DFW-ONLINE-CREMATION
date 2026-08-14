@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Platform window theme shown before Compose attaches. Compose itself is
+         themed via LrtsTheme (ui/theme/Theme.kt) using the same palette. -->
+    <style name="Theme.LRTS" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/lrts_navy</item>
+        <item name="android:navigationBarColor">@color/lrts_navy</item>
+        <item name="android:windowBackground">@color/lrts_white</item>
+    </style>
+</resources>

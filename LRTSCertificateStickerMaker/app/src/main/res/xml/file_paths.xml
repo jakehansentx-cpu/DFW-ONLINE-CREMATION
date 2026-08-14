@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Generated certificate/label PDFs, saved into app-external "Documents". -->
+    <external-files-path name="documents" path="documents/" />
+    <!-- Temporary capture photos and working files for the current job. -->
+    <cache-path name="job_cache" path="job/" />
+    <!-- Imported logos and design-reference files copied into internal storage
+         when a staff member adds or edits a funeral-home profile. -->
+    <files-path name="profile_uploads" path="profile_uploads/" />
+</paths>

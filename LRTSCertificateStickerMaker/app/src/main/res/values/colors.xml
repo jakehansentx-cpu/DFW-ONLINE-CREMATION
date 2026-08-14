@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- LRTS palette, sampled from the source mockup's static/styles.css -->
+    <color name="lrts_navy">#0D1A31</color>
+    <color name="lrts_navy_deep">#081322</color>
+    <color name="lrts_navy_panel">#13233C</color>
+    <color name="lrts_blue">#2F6FED</color>
+    <color name="lrts_blue_light">#4B83F4</color>
+    <color name="lrts_blue_pale">#E9F1FF</color>
+    <color name="lrts_green">#1FA862</color>
+    <color name="lrts_green_deep">#0D6C3B</color>
+    <color name="lrts_green_pale">#D9F4E4</color>
+    <color name="lrts_amber">#F2A51A</color>
+    <color name="lrts_amber_pale">#FFD37E</color>
+    <color name="lrts_red">#DD5963</color>
+    <color name="lrts_red_pale">#FFDFE1</color>
+    <color name="lrts_white">#FFFFFF</color>
+    <color name="lrts_ink">#17263F</color>
+    <color name="lrts_muted">#587092</color>
+</resources>
