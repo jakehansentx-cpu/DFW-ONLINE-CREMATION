@@ -114,6 +114,35 @@ class LogExtractionTest {
     }
 
     @Test
+    fun `real device bug -- a name date and disc split into separate grid cells are still paired into one row`() {
+        // Mirrors an actual on-device read of a photographed spreadsheet: the
+        // table's borders mean ML Kit recognizes "Jake Hansen", "8/13/2026",
+        // and "18339" as three completely separate lines (each its own grid
+        // cell) rather than one merged row line. The old per-line-only search
+        // for date/disc found the name but came up empty for both, blocking
+        // certificate printing (which requires a date and disc number).
+        fun cell(text: String, x: Int, y: Int, w: Int = 100) = OcrLine(text, x, y, x + w, y + 20)
+        val lines = listOf(
+            cell("A B C D", x = 0, y = 0),
+            cell("Deceased Name", x = 0, y = 20, w = 150),
+            cell("Date", x = 160, y = 20),
+            cell("I.D. Disc #", x = 270, y = 20),
+            cell("Aprx Wt", x = 380, y = 20),
+            cell("Jake Hansen", x = 0, y = 200, w = 150),
+            cell("8/13/2026", x = 160, y = 202),
+            cell("18339", x = 270, y = 198),
+            cell("225", x = 380, y = 201),
+            // A blank later row: only its disc-number cell was filled in.
+            cell("18340", x = 270, y = 240)
+        )
+        val rows = LogExtraction.extractLogRows(lines)
+        assertEquals(1, rows.size)
+        assertEquals("Jake Hansen", rows[0].name)
+        assertEquals("8/13/2026", rows[0].cremationDate)
+        assertEquals("18339", rows[0].discId)
+    }
+
+    @Test
     fun `positional filtering is skipped entirely when no date is recognized anywhere`() {
         fun row(text: String, top: Int) = OcrLine(text, left = 0, top = top, right = 200, bottom = top + 20)
         val lines = listOf(row("Jake Hanson", top = 0))

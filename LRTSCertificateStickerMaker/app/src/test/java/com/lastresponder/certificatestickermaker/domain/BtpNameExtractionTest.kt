@@ -134,6 +134,31 @@ class BtpNameExtractionTest {
     }
 
     @Test
+    fun `real device bug -- a garbled watermark line closer vertically than the true value is not chosen over it`() {
+        // Mirrors an actual on-device read of the mock BTP: a diagonal
+        // watermark ("MOCK TEST DOCUMENT... A REAL BURIAL-TRANSIT PERMIT")
+        // crossing the page got OCR-merged into a stray multi-word line, and
+        // because the old margin was derived from the wide "Name of Deceased -
+        // First" label's own width, that stray line - positioned closer
+        // vertically than the real "Jake" value, but far to the right - won a
+        // purely-nearest-vertically search. Position must require left-edge
+        // alignment with a tolerance scaled to text height, not label width.
+        val lines = listOf(
+            line("NAME OF DECEASED - FIRST", x = 80, y = 100, w = 260),
+            line("MIDDLE", x = 360, y = 100, w = 80),
+            line("LAST", x = 500, y = 100, w = 60),
+            // Decoy: a wide, far-right, garbled watermark fragment sitting only
+            // slightly below the header row - closer in raw vertical distance
+            // than the real values, which are one full row further down.
+            line("Burial Transit Permit Test Director", x = 300, y = 128, w = 400),
+            line("JAKE", x = 80, y = 160, w = 70),
+            line("WILLIAM", x = 360, y = 160, w = 90),
+            line("HANSEN", x = 500, y = 160, w = 90)
+        )
+        assertEquals("Jake William Hansen", BtpNameExtraction.extractBtpName(lines))
+    }
+
+    @Test
     fun `positional entry point falls back to text heuristics when there is no table`() {
         val lines = listOf(
             line("STATE OF TEXAS BURIAL-TRANSIT PERMIT", x = 0, y = 0),

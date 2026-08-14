@@ -64,17 +64,25 @@ object BtpNameExtraction {
 
     /**
      * The value line positioned nearest below a label line, restricted to
-     * lines that horizontally overlap the label (i.e. sit in the same table
-     * column) so a value from a neighboring column - or an unrelated decoy
-     * line that happens to trim-match a label word elsewhere on the page -
-     * cannot be picked up.
+     * lines that (a) start at roughly the same left edge as the label - a
+     * table's header and its value are normally both left-aligned within the
+     * same column cell, and using the label's own width as the tolerance
+     * (rather than a fixed multiple of its text height) let a wide label like
+     * "Name of Deceased - First" match content far to its right - and (b) sit
+     * within a bounded distance below it, so a stray line several rows down
+     * (or diagonal watermark text that happens to be the closest match purely
+     * by vertical distance) cannot out-compete the immediate next row.
      */
     private fun nearestValueBelow(lines: List<OcrLine>, label: OcrLine): String? {
-        val margin = maxOf((label.right - label.left) / 2, 20)
-        val labelRange = (label.left - margin)..(label.right + margin)
+        val lineHeight = maxOf(label.bottom - label.top, 10)
+        val horizontalTolerance = lineHeight * 6
+        val maxVerticalGap = lineHeight * 5
+        val leftRange = (label.left - horizontalTolerance)..(label.left + horizontalTolerance)
         return lines
             .asSequence()
-            .filter { it !== label && it.top >= label.bottom && it.centerX in labelRange }
+            .filter { it !== label }
+            .filter { it.top in label.bottom..(label.bottom + maxVerticalGap) }
+            .filter { it.left in leftRange }
             .filter { looksLikeNameToken(it.text) }
             .minByOrNull { it.top - label.bottom }
             ?.text

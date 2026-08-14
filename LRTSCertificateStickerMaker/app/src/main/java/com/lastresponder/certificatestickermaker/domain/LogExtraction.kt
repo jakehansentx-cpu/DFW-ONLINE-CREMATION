@@ -71,9 +71,36 @@ object LogExtraction {
         return ocrLines.filter { it.top >= firstDataRowTop - HEADER_ROW_TOLERANCE }
     }
 
+    /**
+     * A gridded log photographed on-screen (a real spreadsheet, not a single
+     * merged printed line) can have ML Kit recognize each cell - name, date,
+     * disc # - as its own separate line even though they share one visual
+     * row. Grouping by y-position before reading across a row left-to-right
+     * is what lets a name cell be paired with the date/disc cells actually
+     * next to it, instead of only ever finding them when OCR happens to
+     * merge a whole row into a single line.
+     */
+    private fun groupIntoRows(lines: List<OcrLine>): List<List<OcrLine>> {
+        val sorted = lines.sortedBy { it.top }
+        val rows = mutableListOf<MutableList<OcrLine>>()
+        for (line in sorted) {
+            val lineHeight = maxOf(line.bottom - line.top, 10)
+            val currentRow = rows.lastOrNull()
+            if (currentRow != null && line.top - currentRow.first().top <= lineHeight) {
+                currentRow.add(line)
+            } else {
+                rows.add(mutableListOf(line))
+            }
+        }
+        return rows
+    }
+
+    private fun rowText(row: List<OcrLine>): String = row.sortedBy { it.left }.joinToString(" ") { it.text }
+
     /** Preferred entry point when ML Kit's line positions are available. */
     fun extractLogName(ocrLines: List<OcrLine>): String =
-        extractLogName(eligibleDataLines(ocrLines).joinToString("\n") { it.text })
+        extractLogRows(ocrLines).firstOrNull()?.name
+            ?: extractLogName(eligibleDataLines(ocrLines).joinToString("\n") { it.text })
 
     fun extractLogName(text: String): String {
         val lines = text.lines().map { TextNormalization.cleanText(it) }.filter { it.isNotEmpty() }
@@ -115,6 +142,8 @@ object LogExtraction {
 
     /** Preferred entry point when ML Kit's line positions are available. */
     fun extractLogFields(ocrLines: List<OcrLine>): LogFields {
+        val row = extractLogRows(ocrLines).firstOrNull()
+        if (row != null) return LogFields(row.name, row.cremationDate, row.discId)
         val eligible = eligibleDataLines(ocrLines).joinToString("\n") { it.text }
         return LogFields(extractLogName(eligible), extractLogDate(eligible), extractLogDisc(eligible))
     }
@@ -127,8 +156,19 @@ object LogExtraction {
     )
 
     /** Preferred entry point when ML Kit's line positions are available. */
-    fun extractLogRows(ocrLines: List<OcrLine>): List<LogRowCandidate> =
-        extractLogRows(eligibleDataLines(ocrLines).joinToString("\n") { it.text })
+    fun extractLogRows(ocrLines: List<OcrLine>): List<LogRowCandidate> {
+        val rowGroups = groupIntoRows(eligibleDataLines(ocrLines))
+        val rows = mutableListOf<LogRowCandidate>()
+        for (group in rowGroups) {
+            val line = TextNormalization.cleanText(rowText(group))
+            if (line.isEmpty() || SKIP_HEADER.containsMatchIn(line)) continue
+            val match = NAME_LINE.find(line) ?: continue
+            if (isNonNameLine(match.groupValues[1])) continue
+            val name = TextNormalization.displayName(match.groupValues[1])
+            rows.add(LogRowCandidate(name, extractLogDate(line), extractLogDisc(line), line))
+        }
+        return rows
+    }
 
     /**
      * One candidate per log line that looks like a name row. Date/disc are
