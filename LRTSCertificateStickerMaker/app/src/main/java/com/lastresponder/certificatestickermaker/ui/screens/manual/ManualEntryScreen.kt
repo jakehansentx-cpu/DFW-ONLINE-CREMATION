@@ -77,21 +77,6 @@ fun ManualEntryScreen(
                 LabeledField("I.D. disc/disk number", state.discId) { value ->
                     jobViewModel.updateField { it.copy(discId = value) }
                 }
-                LabeledField("Approximate weight (optional)", state.approxWeight) { value ->
-                    jobViewModel.updateField { it.copy(approxWeight = value) }
-                }
-                LabeledField("Start time (optional)", state.startTime) { value ->
-                    jobViewModel.updateField { it.copy(startTime = value) }
-                }
-                LabeledField("Retort (optional)", state.retort) { value ->
-                    jobViewModel.updateField { it.copy(retort = value) }
-                }
-                LabeledField("Operator (optional)", state.operator) { value ->
-                    jobViewModel.updateField { it.copy(operator = value) }
-                }
-                LabeledField("Case type (optional)", state.caseType) { value ->
-                    jobViewModel.updateField { it.copy(caseType = value) }
-                }
             }
 
             Button(onClick = onNext, modifier = Modifier.fillMaxWidth()) { Text("Continue to review") }
