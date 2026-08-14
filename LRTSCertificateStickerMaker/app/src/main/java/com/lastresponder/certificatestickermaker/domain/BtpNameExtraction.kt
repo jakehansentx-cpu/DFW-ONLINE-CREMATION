@@ -55,6 +55,77 @@ object BtpNameExtraction {
         return if (parts.size >= 2) parts.joinToString(" ") else null
     }
 
+    private fun isFirstLabel(text: String) =
+        text.uppercase().let { it.contains("NAME OF DECEASED") || it.trim() == "FIRST" }
+
+    private fun isMiddleLabel(text: String) = text.trim().equals("MIDDLE", ignoreCase = true)
+
+    private fun isLastLabel(text: String) = text.trim().equals("LAST", ignoreCase = true)
+
+    /**
+     * The value line positioned nearest below a label line, restricted to
+     * lines that horizontally overlap the label (i.e. sit in the same table
+     * column) so a value from a neighboring column - or an unrelated decoy
+     * line that happens to trim-match a label word elsewhere on the page -
+     * cannot be picked up.
+     */
+    private fun nearestValueBelow(lines: List<OcrLine>, label: OcrLine): String? {
+        val margin = maxOf((label.right - label.left) / 2, 20)
+        val labelRange = (label.left - margin)..(label.right + margin)
+        return lines
+            .asSequence()
+            .filter { it !== label && it.top >= label.bottom && it.centerX in labelRange }
+            .filter { looksLikeNameToken(it.text) }
+            .minByOrNull { it.top - label.bottom }
+            ?.text
+    }
+
+    /**
+     * When more than one line matches a label pattern - e.g. a stray "Last"
+     * near an unrelated part of the page, such as a signature block - the
+     * candidate on the same visual row as the rest of the column headers is
+     * the real one. [referenceTop] anchors that row; without one (no other
+     * label found yet), the first match in text order is the best guess
+     * available.
+     */
+    private fun bestLabelCandidate(lines: List<OcrLine>, referenceTop: Int?, isLabel: (String) -> Boolean): OcrLine? {
+        val candidates = lines.filter { isLabel(it.text) }
+        return if (referenceTop != null) {
+            candidates.minByOrNull { kotlin.math.abs(it.top - referenceTop) }
+        } else {
+            candidates.firstOrNull()
+        }
+    }
+
+    /**
+     * Positional counterpart of [extractTableColumnName]: pairs each column
+     * label with the value line nearest it on the page instead of nearest in
+     * flattened text order, which is what real on-device captures need since
+     * ML Kit does not always read a multi-column table in visual order.
+     */
+    private fun extractTableColumnNamePositional(lines: List<OcrLine>): String? {
+        val firstLabel = lines.firstOrNull { isFirstLabel(it.text) }
+        val headerRowTop = firstLabel?.top
+        val middleLabel = bestLabelCandidate(lines, headerRowTop, ::isMiddleLabel)
+        val lastLabel = bestLabelCandidate(lines, headerRowTop ?: middleLabel?.top, ::isLastLabel)
+        val first = firstLabel?.let { nearestValueBelow(lines, it) }
+        val middle = middleLabel?.let { nearestValueBelow(lines, it) }
+        val last = lastLabel?.let { nearestValueBelow(lines, it) }
+        val parts = listOfNotNull(first, middle, last).filter { it.isNotBlank() }
+        return if (parts.size >= 2) parts.joinToString(" ") else null
+    }
+
+    /**
+     * Preferred entry point when the caller has ML Kit's line positions
+     * available (real on-device recognition always does). Falls back to the
+     * text-order heuristics below when positional pairing does not find
+     * enough columns.
+     */
+    fun extractBtpName(ocrLines: List<OcrLine>): String {
+        extractTableColumnNamePositional(ocrLines)?.let { return TextNormalization.displayName(it) }
+        return extractBtpName(ocrLines.joinToString("\n") { it.text })
+    }
+
     fun extractBtpName(text: String): String {
         val lines = text.lines().map { TextNormalization.cleanText(it) }.filter { it.isNotEmpty() }
         extractTableColumnName(lines)?.let { return TextNormalization.displayName(it) }

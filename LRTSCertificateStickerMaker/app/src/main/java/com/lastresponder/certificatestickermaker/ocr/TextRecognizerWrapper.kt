@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.lastresponder.certificatestickermaker.domain.OcrLine
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -16,11 +17,25 @@ import kotlin.coroutines.resumeWithException
  */
 object TextRecognizerWrapper {
 
-    suspend fun recognize(bitmap: Bitmap): String = suspendCancellableCoroutine { continuation ->
+    data class RecognizedText(val fullText: String, val lines: List<OcrLine>)
+
+    suspend fun recognize(bitmap: Bitmap): RecognizedText = suspendCancellableCoroutine { continuation ->
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         val image = InputImage.fromBitmap(bitmap, 0)
         recognizer.process(image)
-            .addOnSuccessListener { result -> continuation.resume(result.text) }
+            .addOnSuccessListener { result ->
+                val lines = result.textBlocks.flatMap { block -> block.lines }.map { line ->
+                    val box = line.boundingBox
+                    OcrLine(
+                        text = line.text,
+                        left = box?.left ?: 0,
+                        top = box?.top ?: 0,
+                        right = box?.right ?: 0,
+                        bottom = box?.bottom ?: 0
+                    )
+                }
+                continuation.resume(RecognizedText(result.text, lines))
+            }
             .addOnFailureListener { error -> continuation.resumeWithException(error) }
         continuation.invokeOnCancellation { recognizer.close() }
     }

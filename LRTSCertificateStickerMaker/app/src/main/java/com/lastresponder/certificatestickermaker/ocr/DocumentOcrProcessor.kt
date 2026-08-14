@@ -4,10 +4,11 @@ import android.graphics.Bitmap
 import android.graphics.Matrix
 import com.lastresponder.certificatestickermaker.domain.BtpNameExtraction
 import com.lastresponder.certificatestickermaker.domain.LogExtraction
+import com.lastresponder.certificatestickermaker.domain.OcrLine
 
 enum class DocumentType { BTP, CREMATION_LOG }
 
-data class OcrResult(val rotationDegrees: Int, val rawText: String)
+data class OcrResult(val rotationDegrees: Int, val rawText: String, val lines: List<OcrLine> = emptyList())
 
 /**
  * Runs the bundled ML Kit recognizer at four rotations and keeps the best
@@ -28,15 +29,15 @@ object DocumentOcrProcessor {
         var bestScore = Double.NEGATIVE_INFINITY
         for (angle in ROTATIONS) {
             val rotated = if (angle == 0) bitmap else rotate(bitmap, angle)
-            val text = try {
+            val recognized = try {
                 TextRecognizerWrapper.recognize(rotated)
             } catch (error: Exception) {
-                ""
+                TextRecognizerWrapper.RecognizedText("", emptyList())
             }
-            val score = score(text, documentType)
+            val score = score(recognized.fullText, documentType)
             if (score > bestScore) {
                 bestScore = score
-                best = OcrResult(angle, text)
+                best = OcrResult(angle, recognized.fullText, recognized.lines)
             }
         }
         return best ?: OcrResult(0, "")
@@ -69,8 +70,12 @@ object DocumentOcrProcessor {
 
 data class BtpOcrFields(val fullName: String)
 
-fun OcrResult.toBtpFields(): BtpOcrFields = BtpOcrFields(BtpNameExtraction.extractBtpName(rawText))
+fun OcrResult.toBtpFields(): BtpOcrFields = BtpOcrFields(
+    if (lines.isNotEmpty()) BtpNameExtraction.extractBtpName(lines) else BtpNameExtraction.extractBtpName(rawText)
+)
 
-fun OcrResult.toLogFields(): LogExtraction.LogFields = LogExtraction.extractLogFields(rawText)
+fun OcrResult.toLogFields(): LogExtraction.LogFields =
+    if (lines.isNotEmpty()) LogExtraction.extractLogFields(lines) else LogExtraction.extractLogFields(rawText)
 
-fun OcrResult.toLogRows(): List<LogExtraction.LogRowCandidate> = LogExtraction.extractLogRows(rawText)
+fun OcrResult.toLogRows(): List<LogExtraction.LogRowCandidate> =
+    if (lines.isNotEmpty()) LogExtraction.extractLogRows(lines) else LogExtraction.extractLogRows(rawText)

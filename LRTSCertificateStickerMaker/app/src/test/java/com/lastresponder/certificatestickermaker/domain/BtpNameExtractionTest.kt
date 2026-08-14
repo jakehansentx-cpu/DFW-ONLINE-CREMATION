@@ -93,4 +93,53 @@ class BtpNameExtractionTest {
         val name = BtpNameExtraction.splitLegalName("Jake Robert Hansen Jr")
         assertEquals("Jake Robert Hansen Jr", name.full)
     }
+
+    private fun line(text: String, x: Int, y: Int, w: Int = 100, h: Int = 20) =
+        OcrLine(text, x, y, x + w, y + h)
+
+    @Test
+    fun `real device bug -- a decoy LAST label far from the table is not paired with its neighboring value`() {
+        // Reproduces an actual on-device misread: text-order pairing grabbed a
+        // stray line elsewhere on the page ("Seal", near a signature block) as
+        // the Last-column value because it appeared after a line that
+        // trim-matched "LAST" in flattened OCR order. The list below is built
+        // out of visual order (mirrors ML Kit's real block order jumbling) but
+        // carries real page coordinates, so position - not list order - must
+        // decide the pairing.
+        val lines = listOf(
+            line("SIGNATURE OF REGISTRAR", x = 10, y = 900),
+            line("LAST", x = 10, y = 920),
+            line("Seal", x = 10, y = 940),
+            line("WILLIAM", x = 300, y = 130),
+            line("NAME OF DECEASED FIRST", x = 100, y = 100),
+            line("HANSEN", x = 500, y = 130),
+            line("JAKE", x = 100, y = 130),
+            line("LAST", x = 500, y = 100),
+            line("MIDDLE", x = 300, y = 100)
+        )
+        assertEquals("Jake William Hansen", BtpNameExtraction.extractBtpName(lines))
+    }
+
+    @Test
+    fun `positional pairing only requires the columns it can actually find`() {
+        // Same table, but this capture never recognized a "LAST" label at all -
+        // matches the real capture where only First + Middle combined.
+        val lines = listOf(
+            line("WILLIAM", x = 300, y = 130),
+            line("NAME OF DECEASED FIRST", x = 100, y = 100),
+            line("JAKE", x = 100, y = 130),
+            line("MIDDLE", x = 300, y = 100)
+        )
+        assertEquals("Jake William", BtpNameExtraction.extractBtpName(lines))
+    }
+
+    @Test
+    fun `positional entry point falls back to text heuristics when there is no table`() {
+        val lines = listOf(
+            line("STATE OF TEXAS BURIAL-TRANSIT PERMIT", x = 0, y = 0),
+            line("JAKE HANSEN", x = 0, y = 30),
+            line("CREMATION AUTHORIZED", x = 0, y = 60)
+        )
+        assertEquals("Jake Hansen", BtpNameExtraction.extractBtpName(lines))
+    }
 }
