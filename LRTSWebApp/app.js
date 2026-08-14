@@ -195,11 +195,19 @@ function openPdfBlob(bytes, filename) {
   }
 }
 
+// buildCertificatePdf/buildLabelsPdf (pdfgen.js) both expect a single
+// decedentName string per case; the batch list stores first/middle/last/
+// suffix separately (matching the form fields), so every call into pdfgen.js
+// needs to go through this mapping first.
+function withDecedentName(c) {
+  return { ...c, decedentName: fullName(c) };
+}
+
 async function printAllCertificates() {
   if (cases.length === 0) return;
   try {
     showStatus("Building certificates...", false);
-    const bytes = await buildCertificatePdf(cases);
+    const bytes = await buildCertificatePdf(cases.map(withDecedentName));
     openPdfBlob(bytes, `certificates-${Date.now()}.pdf`);
     showStatus(`Opened ${cases.length} certificate(s) - use your browser's Print button.`, false);
   } catch (error) {
@@ -211,7 +219,7 @@ async function printAllLabels() {
   if (cases.length === 0) return;
   try {
     showStatus("Building sticker sheets...", false);
-    const casesWithProfiles = cases.map((c) => ({ ...c, profile: findProfile(c.profileId) || {} }));
+    const casesWithProfiles = cases.map((c) => withDecedentName({ ...c, profile: findProfile(c.profileId) || {} }));
     const bytes = await buildLabelsPdf(casesWithProfiles);
     openPdfBlob(bytes, `stickers-${Date.now()}.pdf`);
     showStatus("Opened sticker sheet(s) - use your browser's Print button.", false);
