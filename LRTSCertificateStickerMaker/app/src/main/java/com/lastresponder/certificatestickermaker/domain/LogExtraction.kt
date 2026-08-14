@@ -71,31 +71,42 @@ object LogExtraction {
         return ocrLines.filter { it.top >= firstDataRowTop - HEADER_ROW_TOLERANCE }
     }
 
-    /**
-     * A gridded log photographed on-screen (a real spreadsheet, not a single
-     * merged printed line) can have ML Kit recognize each cell - name, date,
-     * disc # - as its own separate line even though they share one visual
-     * row. Grouping by y-position before reading across a row left-to-right
-     * is what lets a name cell be paired with the date/disc cells actually
-     * next to it, instead of only ever finding them when OCR happens to
-     * merge a whole row into a single line.
-     */
-    private fun groupIntoRows(lines: List<OcrLine>): List<List<OcrLine>> {
-        val sorted = lines.sortedBy { it.top }
-        val rows = mutableListOf<MutableList<OcrLine>>()
-        for (line in sorted) {
-            val lineHeight = maxOf(line.bottom - line.top, 10)
-            val currentRow = rows.lastOrNull()
-            if (currentRow != null && line.top - currentRow.first().top <= lineHeight) {
-                currentRow.add(line)
-            } else {
-                rows.add(mutableListOf(line))
-            }
-        }
-        return rows
-    }
-
     private fun rowText(row: List<OcrLine>): String = row.sortedBy { it.left }.joinToString(" ") { it.text }
+
+    private fun isNameLabel(text: String) = text.trim().uppercase().contains("NAME")
+    private fun isDateLabel(text: String) = text.trim().uppercase() == "DATE"
+    private fun isDiscLabel(text: String) = text.trim().uppercase().let { it.contains("DISC") || it.contains("DISK") }
+
+    /**
+     * Builds an actual Name/Date/Disc table from the recognized lines'
+     * positions - finds the row where these three column headers genuinely
+     * co-occur left-to-right (columns A/B/C on the real log), derives three
+     * column bands from their positions, then reads every row below into
+     * those same bands. Returning null only when no such header row can be
+     * found at all lets a genuinely empty result (a header row with no data
+     * beneath it yet) come back as an empty list rather than falling through
+     * to the looser text-based heuristics below, which is what actually
+     * excludes app chrome and misread header-cell text - those never form a
+     * real three-column header row in the first place.
+     */
+    private fun extractTableGridRows(ocrLines: List<OcrLine>): List<LogRowCandidate>? {
+        val rows = ocrLines.groupIntoRows()
+        val (nameLabel, dateLabel, discLabel) = rows.findOrderedHeaderRow(::isNameLabel, ::isDateLabel, ::isDiscLabel) ?: return null
+        val bands = columnBandsFrom(nameLabel, dateLabel, discLabel)
+        val headerTop = nameLabel.top
+        val dataRows = rows.filter { it.isNotEmpty() && it.first().top > headerTop }.sortedBy { it.first().top }
+        val results = mutableListOf<LogRowCandidate>()
+        for (row in dataRows) {
+            val nameText = TextNormalization.cleanText(bandText(row, bands[0]))
+            val match = NAME_LINE.find(nameText) ?: continue
+            if (isNonNameLine(match.groupValues[1])) continue
+            val name = TextNormalization.displayName(match.groupValues[1])
+            val dateText = bandText(row, bands[1])
+            val discText = bandText(row, bands[2])
+            results.add(LogRowCandidate(name, extractLogDate(dateText), extractLogDisc(discText), rowText(row)))
+        }
+        return results
+    }
 
     /** Preferred entry point when ML Kit's line positions are available. */
     fun extractLogName(ocrLines: List<OcrLine>): String =
@@ -157,7 +168,8 @@ object LogExtraction {
 
     /** Preferred entry point when ML Kit's line positions are available. */
     fun extractLogRows(ocrLines: List<OcrLine>): List<LogRowCandidate> {
-        val rowGroups = groupIntoRows(eligibleDataLines(ocrLines))
+        extractTableGridRows(ocrLines)?.let { return it }
+        val rowGroups = eligibleDataLines(ocrLines).groupIntoRows()
         val rows = mutableListOf<LogRowCandidate>()
         for (group in rowGroups) {
             val line = TextNormalization.cleanText(rowText(group))

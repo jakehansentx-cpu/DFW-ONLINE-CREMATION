@@ -203,6 +203,33 @@ class BtpNameExtractionTest {
     }
 
     @Test
+    fun `real device layout -- the whole permit photographed in one shot still finds the immediate data row`() {
+        // Mirrors photographing the entire BTP in one shot: many further rows
+        // follow below the name table (age, place of death, funeral director,
+        // registrar signature, ...), some of which contain two-word
+        // capitalized text of their own ("Test Director", "M. Registrar").
+        // The header-anchored data row selection must pick the row
+        // immediately below the header, not get confused by later rows.
+        val lines = listOf(
+            line("NAME OF DECEASED - FIRST", x = 20, y = 100, w = 320),
+            line("MIDDLE", x = 380, y = 100, w = 80),
+            line("LAST", x = 500, y = 100, w = 60),
+            line("JAKE", x = 20, y = 140, w = 70),
+            line("WILLIAM", x = 380, y = 140, w = 90),
+            line("HANSEN", x = 500, y = 140, w = 90),
+            line("AGE 41 Years", x = 20, y = 180, w = 150),
+            line("DATE OF DEATH 01/01/2026", x = 380, y = 180, w = 200),
+            line("PLACE OF DEATH", x = 20, y = 220, w = 150),
+            line("Test Medical Center Dallas", x = 20, y = 250, w = 250),
+            line("PRINT NAME OF FUNERAL DIRECTOR", x = 20, y = 290, w = 300),
+            line("Test Director", x = 20, y = 320, w = 150),
+            line("LOCAL REGISTRAR", x = 20, y = 360, w = 150),
+            line("M. Registrar", x = 20, y = 400, w = 150)
+        )
+        assertEquals("Jake William Hansen", BtpNameExtraction.extractBtpName(lines))
+    }
+
+    @Test
     fun `positional entry point falls back to text heuristics when there is no table`() {
         val lines = listOf(
             line("STATE OF TEXAS BURIAL-TRANSIT PERMIT", x = 0, y = 0),

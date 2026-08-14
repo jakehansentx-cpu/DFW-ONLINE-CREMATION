@@ -114,10 +114,43 @@ object BtpNameExtraction {
     }
 
     /**
+     * Builds an actual First/Middle/Last table from the recognized lines'
+     * positions - finds the row where the three column labels genuinely
+     * co-occur left-to-right (the real header, wherever it sits), derives
+     * three column bands from their positions, then reads whichever data row
+     * sits directly below into those same bands. This is the primary
+     * strategy: it only trusts a row as "the header" when all three labels
+     * are found together in one row in the right order, so a decoy label
+     * elsewhere on the page (a stray "Last" near a signature block, a
+     * misread repeat of the header itself) never enters the picture, and a
+     * value is assigned to a column by which band it falls in rather than by
+     * distance to a single label - both are proper table semantics instead
+     * of proximity heuristics.
+     */
+    private fun extractTableGridName(lines: List<OcrLine>): String? {
+        val rows = lines.groupIntoRows()
+        val (firstLabel, middleLabel, lastLabel) = rows.findOrderedHeaderRow(::isFirstLabel, ::isMiddleLabel, ::isLastLabel) ?: return null
+        val bands = columnBandsFrom(firstLabel, middleLabel, lastLabel)
+        val headerTop = firstLabel.top
+        val dataRow = rows
+            .filter { it.isNotEmpty() && it.first().top > headerTop }
+            .sortedBy { it.first().top }
+            .firstOrNull { row -> bands.any { band -> looksLikeNameToken(bandText(row, band)) } }
+            ?: return null
+        val first = bandText(dataRow, bands[0]).takeIf { looksLikeNameToken(it) }
+        val middle = bandText(dataRow, bands[1]).takeIf { looksLikeNameToken(it) }
+        val last = bandText(dataRow, bands[2]).takeIf { looksLikeNameToken(it) }
+        val parts = listOfNotNull(first, middle, last).filter { it.isNotBlank() }
+        return if (parts.size >= 2) parts.joinToString(" ") else null
+    }
+
+    /**
      * Positional counterpart of [extractTableColumnName]: pairs each column
      * label with the value line nearest it on the page instead of nearest in
      * flattened text order, which is what real on-device captures need since
-     * ML Kit does not always read a multi-column table in visual order.
+     * ML Kit does not always read a multi-column table in visual order. Used
+     * as a fallback for captures where [extractTableGridName] cannot cleanly
+     * identify one header row containing all three labels together.
      */
     private fun extractTableColumnNamePositional(lines: List<OcrLine>): String? {
         val firstLabel = lines.firstOrNull { isFirstLabel(it.text) }
@@ -139,6 +172,7 @@ object BtpNameExtraction {
      * enough columns.
      */
     fun extractBtpName(ocrLines: List<OcrLine>): String {
+        extractTableGridName(ocrLines)?.let { return TextNormalization.displayName(it) }
         extractTableColumnNamePositional(ocrLines)?.let { return TextNormalization.displayName(it) }
         return extractBtpName(ocrLines.joinToString("\n") { it.text })
     }

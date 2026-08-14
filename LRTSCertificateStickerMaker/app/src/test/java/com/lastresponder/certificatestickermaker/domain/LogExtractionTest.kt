@@ -143,6 +143,30 @@ class LogExtractionTest {
     }
 
     @Test
+    fun `real device layout -- a full page of mostly-blank disc rows still surfaces exactly the one filled row`() {
+        // Mirrors the actual screenshot: a pre-printed log with a full column
+        // of disc numbers (18339-18348) running many rows down, where only
+        // the very first row has a name and date filled in yet.
+        fun cell(text: String, x: Int, y: Int, w: Int = 100) = OcrLine(text, x, y, x + w, y + 20)
+        val lines = mutableListOf(
+            cell("A B C D", x = 0, y = 0),
+            cell("Deceased Name", x = 0, y = 40, w = 150),
+            cell("Date", x = 160, y = 40),
+            cell("I.D. Disc #", x = 270, y = 40),
+            cell("Jake Hansen", x = 0, y = 90, w = 150),
+            cell("8/13/2026", x = 160, y = 92),
+            cell("18339", x = 270, y = 88)
+        )
+        for ((index, disc) in (18340..18346).withIndex()) {
+            lines.add(cell(disc.toString(), x = 270, y = 130 + index * 40))
+        }
+        val rows = LogExtraction.extractLogRows(lines)
+        assertEquals(1, rows.size)
+        assertEquals("Jake Hansen", rows[0].name)
+        assertEquals("18339", rows[0].discId)
+    }
+
+    @Test
     fun `positional filtering is skipped entirely when no date is recognized anywhere`() {
         fun row(text: String, top: Int) = OcrLine(text, left = 0, top = top, right = 200, bottom = top + 20)
         val lines = listOf(row("Jake Hanson", top = 0))
