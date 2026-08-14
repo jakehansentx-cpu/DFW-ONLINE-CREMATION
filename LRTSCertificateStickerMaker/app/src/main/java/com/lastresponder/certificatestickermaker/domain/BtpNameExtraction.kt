@@ -62,30 +62,31 @@ object BtpNameExtraction {
 
     private fun isLastLabel(text: String) = text.trim().equals("LAST", ignoreCase = true)
 
+    /** 0 when the two spans overlap; otherwise the gap between their nearest edges. */
+    private fun horizontalGap(a: OcrLine, b: OcrLine): Int =
+        maxOf(0, maxOf(a.left - b.right, b.left - a.right))
+
     /**
-     * The value line positioned nearest below a label line, restricted to
-     * lines that (a) start at roughly the same left edge as the label - a
-     * table's header and its value are normally both left-aligned within the
-     * same column cell, and using the label's own width as the tolerance
-     * (rather than a fixed multiple of its text height) let a wide label like
-     * "Name of Deceased - First" match content far to its right - and (b) sit
-     * within a bounded distance below it, so a stray line several rows down
-     * (or diagonal watermark text that happens to be the closest match purely
-     * by vertical distance) cannot out-compete the immediate next row.
+     * The best value line for a label, scored by vertical distance below it
+     * plus horizontal gap from it (zero when the two overlap). A fixed
+     * horizontal tolerance does not work here: too tight and it misses a
+     * value that sits under the right-hand word of a wide compound label
+     * like "Name of Deceased - First" (whose own left edge is nowhere near
+     * where "First"'s value actually is); too loose and it lets a
+     * neighboring column's value bleed in. Scoring by combined distance and
+     * removing each chosen value from [used] before scoring the next label
+     * avoids both: whichever label a value is actually closest to wins it,
+     * and it cannot also be claimed by another column.
      */
-    private fun nearestValueBelow(lines: List<OcrLine>, label: OcrLine): String? {
+    private fun bestValueBelow(lines: List<OcrLine>, label: OcrLine, used: MutableSet<OcrLine>): OcrLine? {
         val lineHeight = maxOf(label.bottom - label.top, 10)
-        val horizontalTolerance = lineHeight * 6
-        val maxVerticalGap = lineHeight * 5
-        val leftRange = (label.left - horizontalTolerance)..(label.left + horizontalTolerance)
+        val maxVerticalGap = lineHeight * 6
         return lines
             .asSequence()
-            .filter { it !== label }
+            .filter { it !== label && it !in used }
             .filter { it.top in label.bottom..(label.bottom + maxVerticalGap) }
-            .filter { it.left in leftRange }
             .filter { looksLikeNameToken(it.text) }
-            .minByOrNull { it.top - label.bottom }
-            ?.text
+            .minByOrNull { (it.top - label.bottom) + horizontalGap(it, label) }
     }
 
     /**
@@ -116,10 +117,11 @@ object BtpNameExtraction {
         val headerRowTop = firstLabel?.top
         val middleLabel = bestLabelCandidate(lines, headerRowTop, ::isMiddleLabel)
         val lastLabel = bestLabelCandidate(lines, headerRowTop ?: middleLabel?.top, ::isLastLabel)
-        val first = firstLabel?.let { nearestValueBelow(lines, it) }
-        val middle = middleLabel?.let { nearestValueBelow(lines, it) }
-        val last = lastLabel?.let { nearestValueBelow(lines, it) }
-        val parts = listOfNotNull(first, middle, last).filter { it.isNotBlank() }
+        val used = mutableSetOf<OcrLine>()
+        val first = firstLabel?.let { bestValueBelow(lines, it, used) }?.also { used.add(it) }
+        val middle = middleLabel?.let { bestValueBelow(lines, it, used) }?.also { used.add(it) }
+        val last = lastLabel?.let { bestValueBelow(lines, it, used) }
+        val parts = listOfNotNull(first?.text, middle?.text, last?.text).filter { it.isNotBlank() }
         return if (parts.size >= 2) parts.joinToString(" ") else null
     }
 

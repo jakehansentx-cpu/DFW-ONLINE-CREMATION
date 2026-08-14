@@ -159,6 +159,25 @@ class BtpNameExtractionTest {
     }
 
     @Test
+    fun `real device bug -- a value under the right side of a wide compound label is still found`() {
+        // Mirrors an actual on-device read: the header line reads "Name of
+        // Deceased - First" as one wide OCR line starting well to the left of
+        // where "Jake" actually sits (which is roughly under the word
+        // "First", near the label's right edge, not its left). Requiring the
+        // value's left edge to match the label's own left edge - the previous
+        // fix - missed this; overlap between the two spans finds it.
+        val lines = listOf(
+            line("NAME OF DECEASED - FIRST", x = 20, y = 100, w = 320),
+            line("MIDDLE", x = 380, y = 100, w = 80),
+            line("LAST", x = 500, y = 100, w = 60),
+            line("JAKE", x = 260, y = 160, w = 70),
+            line("WILLIAM", x = 380, y = 160, w = 90),
+            line("HANSEN", x = 500, y = 160, w = 90)
+        )
+        assertEquals("Jake William Hansen", BtpNameExtraction.extractBtpName(lines))
+    }
+
+    @Test
     fun `positional entry point falls back to text heuristics when there is no table`() {
         val lines = listOf(
             line("STATE OF TEXAS BURIAL-TRANSIT PERMIT", x = 0, y = 0),
