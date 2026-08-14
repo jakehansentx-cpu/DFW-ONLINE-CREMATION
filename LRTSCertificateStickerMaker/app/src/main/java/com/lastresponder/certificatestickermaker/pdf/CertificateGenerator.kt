@@ -29,10 +29,10 @@ class CertificateValidationException(missingFields: List<String>) :
  */
 object CertificateGenerator {
 
-    // Original reportlab page size: 540 x 396.85 points (a Metro stock-paper certificate,
-    // not US Letter — see MIGRATION_MAP.md). Kept exactly as in app.py.
+    // 7.5in x 5.5in exactly (540pt x 396pt at 72pt/in) - the actual Metro
+    // certificate stock paper size, not US Letter - see MIGRATION_MAP.md.
     const val PAGE_WIDTH_PT = 540f
-    const val PAGE_HEIGHT_PT = 396.85f
+    const val PAGE_HEIGHT_PT = 396f
     private const val CENTER_X = PAGE_WIDTH_PT / 2f
 
     fun generate(data: CertificateData, fonts: PdfFonts): PdfDocument {

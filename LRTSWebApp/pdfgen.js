@@ -57,8 +57,10 @@ async function base64ToBytes(dataUri) {
 
 // ---- Certificate (CertificateGenerator.kt) ----
 
+// 7.5in x 5.5in exactly (540pt x 396pt at 72pt/in) - the actual Metro
+// certificate stock paper size.
 const CERT_PAGE_WIDTH = 540;
-const CERT_PAGE_HEIGHT = 396.85;
+const CERT_PAGE_HEIGHT = 396;
 const CERT_CENTER_X = CERT_PAGE_WIDTH / 2;
 const CERT_BLUE = rgb(0x00 / 255, 0x3a / 255, 0x9b / 255);
 const BLACK = rgb(0, 0, 0);
