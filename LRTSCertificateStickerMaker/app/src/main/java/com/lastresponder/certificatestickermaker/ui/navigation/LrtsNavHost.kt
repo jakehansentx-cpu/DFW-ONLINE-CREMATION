@@ -60,7 +60,7 @@ fun LrtsNavHost(
             ManualEntryScreen(
                 jobViewModel = jobViewModel,
                 onBack = { navController.popBackStack() },
-                onNext = { navController.navigate(Routes.OCR_REVIEW) }
+                onNext = { navController.navigate(Routes.VERIFICATION) }
             )
         }
         composable(Routes.OCR_REVIEW) {

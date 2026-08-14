@@ -29,9 +29,7 @@ import com.lastresponder.certificatestickermaker.viewmodel.JobViewModel
 private data class IntakeOption(val mode: IntakeMode, val title: String, val subtitle: String)
 
 private val OPTIONS = listOf(
-    IntakeOption(IntakeMode.SCAN, "Scan documents", "Photograph or upload the BTP and cremation log"),
-    IntakeOption(IntakeMode.MANUAL, "Manual entry", "Type every certificate and sticker detail"),
-    IntakeOption(IntakeMode.HYBRID, "Hybrid entry", "Scan what you have; type the rest")
+    IntakeOption(IntakeMode.MANUAL, "Manual entry", "Type every certificate and sticker detail")
 )
 
 @Composable
