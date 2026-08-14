@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LRTS Certificate &amp; Sticker Maker — Desktop</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>LRTS Certificate &amp; Sticker Maker</h1>
+  <p class="subtitle">Last Responder Transport Services LLC — batch entry, one print run for everyone</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2 id="formHeading">Add a case to the batch</h2>
+    <div class="formGrid">
+      <label>First name
+        <input type="text" id="firstName" autocomplete="off">
+      </label>
+      <label>Middle name or initial
+        <input type="text" id="middleName" autocomplete="off">
+      </label>
+      <label>Last name
+        <input type="text" id="lastName" autocomplete="off">
+      </label>
+      <label>Suffix (if present)
+        <input type="text" id="suffixName" autocomplete="off">
+      </label>
+      <label>Date of cremation
+        <input type="date" id="cremationDate">
+      </label>
+      <label>I.D. disc/disk number
+        <input type="text" id="discId" autocomplete="off">
+      </label>
+      <label>Funeral home
+        <select id="profileSelect"></select>
+      </label>
+      <label>Sticker quantity
+        <input type="number" id="labelQuantity" min="1" max="60" value="2">
+      </label>
+    </div>
+    <div class="formActions">
+      <button id="addButton" class="primary">Add to batch</button>
+      <button id="cancelEditButton" class="secondary">Clear form</button>
+    </div>
+    <div id="statusBox" class="status" style="display:none;"></div>
+  </section>
+
+  <section class="card">
+    <h2>Batch (<span id="batchCount">0</span> case<span id="batchPlural"></span>)</h2>
+    <div class="tableWrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Decedent</th>
+            <th>Cremation date</th>
+            <th>Disc #</th>
+            <th>Funeral home</th>
+            <th>Stickers</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="batchTableBody"></tbody>
+      </table>
+    </div>
+    <div class="formActions">
+      <button id="printCertsBtn" class="primary" disabled>Print All Certificates</button>
+      <button id="printLabelsBtn" class="primary" disabled>Print All Stickers</button>
+      <button id="clearBatchBtn" class="danger">Clear Entire Batch</button>
+    </div>
+    <p class="hint">
+      Each print button opens one combined PDF in a new tab covering every case
+      currently in the batch — use your browser's Print button from there.
+      Nothing is sent anywhere; everything happens on this computer.
+    </p>
+  </section>
+</main>
+
+<script src="lib/pdf-lib.min.js"></script>
+<script src="logos.js"></script>
+<script src="profiles.js"></script>
+<script src="text.js"></script>
+<script src="pdfgen.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
