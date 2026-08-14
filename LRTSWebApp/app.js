@@ -1,4 +1,4 @@
-// Batch state + UI wiring for the LRTS desktop certificate/sticker maker.
+// Batch state + UI wiring for the Metro desktop certificate/sticker maker.
 // Everything lives in memory plus a localStorage mirror (so an accidental
 // tab close doesn't lose an in-progress batch) - there is no server and
 // nothing leaves this machine.

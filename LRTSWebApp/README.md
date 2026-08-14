@@ -1,4 +1,4 @@
-# LRTS Certificate & Sticker Maker — Desktop (Web App)
+# Metro Certificate & Sticker Maker — Desktop (Web App)
 
 A browser-based, batch-entry companion to the Android app. No installation,
 no build step, no server — everything runs locally in your browser and
