@@ -123,12 +123,18 @@ function updateLabelQuantityDefault() {
   }
 }
 
+// I.D. disc number is deliberately NOT required here - it's only used on
+// the certificate (buildCertificatePdf has its own check for that, and
+// blocks certificate printing on a case missing it, with a clear error).
+// Stickers never print a disc number, so a case can be added to the batch
+// and have its sticker printed with the disc number left blank - useful
+// for a stickers-only run, or a certificate-only reprint later once the
+// disc number is known.
 function validateForm(data) {
   const missing = [];
   if (cleanText(data.first) === "") missing.push("First name");
   if (cleanText(data.last) === "") missing.push("Last name");
   if (cleanText(data.cremationDate) === "") missing.push("Date of cremation");
-  if (cleanText(data.discId) === "") missing.push("I.D. disc number");
   if (data.profileId === CUSTOM_PROFILE_ID && cleanText(data.customFuneralHome) === "") {
     missing.push("Funeral home name");
   }
