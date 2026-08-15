@@ -8,6 +8,13 @@ const STORAGE_KEY = "lrts-batch-v1";
 let cases = [];
 let editingId = null;
 
+// Positions (1-6) on the FIRST physical Avery 8464 sheet that already have
+// a label stuck to them - set by clicking the sheet-layout grid before
+// printing stickers, so a partially-used sheet can be finished off instead
+// of wasted. Not persisted across reloads; it describes whatever physical
+// sheet is currently in the printer, not a saved preference.
+let skippedSheetPositions = new Set();
+
 function loadBatch() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -221,12 +228,34 @@ async function printAllLabels() {
   try {
     showStatus("Building sticker sheets...", false);
     const casesWithProfiles = cases.map((c) => withDecedentName({ ...c, profile: findProfile(c.profileId) || {} }));
-    const bytes = await buildLabelsPdf(casesWithProfiles);
+    const bytes = await buildLabelsPdf(casesWithProfiles, skippedSheetPositions);
     openPdfBlob(bytes, `stickers-${Date.now()}.pdf`);
     showStatus("Opened sticker sheet(s) - use your browser's Print button.", false);
   } catch (error) {
     showStatus(error.message || String(error), true);
   }
+}
+
+function renderSheetGrid() {
+  document.querySelectorAll("#sheetGrid .sheetCell").forEach((cell) => {
+    const position = parseInt(cell.dataset.position, 10);
+    cell.classList.toggle("used", skippedSheetPositions.has(position));
+    cell.setAttribute("aria-pressed", skippedSheetPositions.has(position) ? "true" : "false");
+  });
+}
+
+function toggleSheetPosition(position) {
+  if (skippedSheetPositions.has(position)) {
+    skippedSheetPositions.delete(position);
+  } else {
+    skippedSheetPositions.add(position);
+  }
+  renderSheetGrid();
+}
+
+function resetSheetLayout() {
+  skippedSheetPositions.clear();
+  renderSheetGrid();
 }
 
 function clearWholeBatch() {
@@ -249,6 +278,12 @@ function init() {
   el("printCertsBtn").addEventListener("click", printAllCertificates);
   el("printLabelsBtn").addEventListener("click", printAllLabels);
   el("clearBatchBtn").addEventListener("click", clearWholeBatch);
+
+  document.querySelectorAll("#sheetGrid .sheetCell").forEach((cell) => {
+    cell.addEventListener("click", () => toggleSheetPosition(parseInt(cell.dataset.position, 10)));
+  });
+  el("resetSheetLayoutBtn").addEventListener("click", resetSheetLayout);
+  renderSheetGrid();
 }
 
 document.addEventListener("DOMContentLoaded", init);

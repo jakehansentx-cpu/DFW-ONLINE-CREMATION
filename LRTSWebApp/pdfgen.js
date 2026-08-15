@@ -173,14 +173,35 @@ function groupCasesByProfile(cases) {
 // batch, packed continuously across sheets and grouped by funeral home -
 // the whole point of the batch print run: nobody has to babysit one case's
 // sheet at a time, or hand-sort stickers by funeral home afterward.
-function computeBatchPlacements(cases) {
+//
+// skipPositions (1-6, matching the sheet-layout picker in the UI) marks
+// positions on the FIRST physical sheet that already have a label on them
+// - printing starts on the next open position and fills normally from
+// there. Only page 0 is affected; any sheet after the first is assumed to
+// be a fresh, full sheet. If every position on the first sheet is skipped,
+// the (otherwise-blank) first page is dropped entirely rather than printed
+// empty.
+function computeBatchPlacements(cases, skipPositions = new Set()) {
   const ordered = groupCasesByProfile(cases);
   const placements = [];
   let position = 1; // 1-6, wraps to a new page after 6
   let pageIndex = 0;
+
+  function skipUsedPositions() {
+    if (pageIndex !== 0) return;
+    while (position <= POSITIONS_PER_SHEET && skipPositions.has(position)) {
+      position += 1;
+    }
+    if (position > POSITIONS_PER_SHEET) {
+      position = 1;
+      pageIndex += 1;
+    }
+  }
+
   for (const c of ordered) {
     const qty = clampQuantity(c.labelQuantity);
     for (let i = 0; i < qty; i++) {
+      skipUsedPositions();
       const [x, y] = labelOrigin(position);
       placements.push({ pageIndex, x, y, caseData: c });
       position += 1;
@@ -190,10 +211,18 @@ function computeBatchPlacements(cases) {
       }
     }
   }
+
+  if (placements.length > 0) {
+    const minPage = Math.min(...placements.map((p) => p.pageIndex));
+    if (minPage > 0) {
+      for (const p of placements) p.pageIndex -= minPage;
+    }
+  }
+
   return placements;
 }
 
-async function buildLabelsPdf(cases) {
+async function buildLabelsPdf(cases, skipPositions = new Set()) {
   for (const c of cases) {
     if (cleanText(c.decedentName) === "") {
       throw new Error("A decedent name is required for every case before printing stickers.");
@@ -215,7 +244,7 @@ async function buildLabelsPdf(cases) {
     return embeddedLogos[logoKey];
   }
 
-  const placements = computeBatchPlacements(cases);
+  const placements = computeBatchPlacements(cases, skipPositions);
   if (placements.length === 0) return pdfDoc.save();
 
   const pageCount = placements[placements.length - 1].pageIndex + 1;

@@ -65,6 +65,23 @@
         <tbody id="batchTableBody"></tbody>
       </table>
     </div>
+    <div class="sheetLayoutCard">
+      <h3>First sticker sheet layout</h3>
+      <p class="hint">
+        If your first sheet of labels already has some stickers used, click those
+        positions below to skip them. Printing starts on the next empty position
+        and fills normally from there; a second sheet (if needed) always starts full.
+      </p>
+      <div class="sheetGrid" id="sheetGrid">
+        <button type="button" class="sheetCell" data-position="1">1</button>
+        <button type="button" class="sheetCell" data-position="2">2</button>
+        <button type="button" class="sheetCell" data-position="3">3</button>
+        <button type="button" class="sheetCell" data-position="4">4</button>
+        <button type="button" class="sheetCell" data-position="5">5</button>
+        <button type="button" class="sheetCell" data-position="6">6</button>
+      </div>
+      <button type="button" id="resetSheetLayoutBtn" class="linkButton">Reset to full sheet</button>
+    </div>
     <div class="formActions">
       <button id="printCertsBtn" class="primary" disabled>Print All Certificates</button>
       <button id="printLabelsBtn" class="primary" disabled>Print All Stickers</button>
