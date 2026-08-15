@@ -52,7 +52,7 @@ function readForm() {
     cremationDate: el("cremationDate").value,
     discId: el("discId").value,
     profileId,
-    labelQuantity: parseInt(el("labelQuantity").value, 10) || (profile ? profile.defaultQuantity : 2),
+    labelQuantity: parseInt(el("labelQuantity").value, 10) || 1,
   };
 }
 
@@ -69,9 +69,10 @@ function clearForm() {
 }
 
 function updateLabelQuantityDefault() {
-  const profile = findProfile(el("profileSelect").value);
-  if (profile && !editingId) {
-    el("labelQuantity").value = profile.defaultQuantity;
+  // Sticker quantity always starts at 1, regardless of funeral home -
+  // no longer varies per profile.
+  if (!editingId) {
+    el("labelQuantity").value = 1;
   }
 }
 
