@@ -192,7 +192,7 @@ const PROFILES = [
     cityState: "Commerce, Texas",
     defaultQuantity: 2,
     preface: PREFACE,
-    disclosure: "", // Source design has no standard disclosure - preserved as blank, not defaulted.
+    disclosure: STANDARD_DISCLOSURE,
     logo: "metro_logo",
     headerMode: "logo",
   },
