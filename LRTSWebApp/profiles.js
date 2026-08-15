@@ -90,6 +90,12 @@ const PROFILES = [
     // no separate city/state line.
     logo: "metro_logo",
     secondaryLogo: "chamberland_logo",
+    // Chamberland's logo art is a very wide, short banner (~5:1) - the
+    // shared default box is nearly square by comparison, so it only used
+    // part of its space and looked like it was floating. Widen just this
+    // profile's box to match the art's own proportions.
+    secondaryLogoBoxWidth: 220,
+    secondaryLogoBoxHeight: 48,
     headerMode: "logo",
     printFuneralHome: "",
     printCityState: "",

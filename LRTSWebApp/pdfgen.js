@@ -323,9 +323,15 @@ async function drawLabel(page, caseData, x, y, w, h, fonts) {
   // the funeral home's name text, with the city/state line shifted down to
   // clear it.
   if (profile.secondaryLogo && fonts.secondaryLogoImage) {
+    // Anchored from the box's fixed top edge (y+h-119), like the header
+    // logo above, so a profile with a wider/shorter or taller/narrower
+    // secondary logo can override just its own box size (e.g. Chamberland's
+    // very wide banner logo) without moving anyone else's default box.
+    const boxWidth = profile.secondaryLogoBoxWidth || 140;
+    const boxHeight = profile.secondaryLogoBoxHeight || 42;
     const [bx, by, bw, bh] = aspectFitBox(
       fonts.secondaryLogoImage.width, fonts.secondaryLogoImage.height,
-      x + (w - 140) / 2, y + h - 161, 140, 42
+      x + (w - boxWidth) / 2, y + h - 119 - boxHeight, boxWidth, boxHeight
     );
     page.drawImage(fonts.secondaryLogoImage, { x: bx, y: by, width: bw, height: bh });
     fitCentered(page, cityState, y + h - 174, w - 32, fonts.serifBold, 10.5, x + w / 2, BLACK, 6.5);
