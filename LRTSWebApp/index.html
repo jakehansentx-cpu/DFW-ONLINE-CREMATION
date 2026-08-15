@@ -41,6 +41,18 @@
         <input type="number" id="labelQuantity" min="1" max="60" value="2">
       </label>
     </div>
+    <div class="formGrid" id="customFuneralHomeFields" style="display:none;">
+      <label>Funeral home name (typed in manually)
+        <input type="text" id="customFuneralHomeName" autocomplete="off">
+      </label>
+      <label>City, State (optional)
+        <input type="text" id="customCityState" autocomplete="off">
+      </label>
+    </div>
+    <p class="hint" id="customFuneralHomeHint" style="display:none;">
+      This case's sticker will use the Metro logo and standard disclosure, with the
+      name and city/state you type above printed under the decedent's name.
+    </p>
     <div class="formActions">
       <button id="addButton" class="primary">Add to batch</button>
       <button id="cancelEditButton" class="secondary">Clear form</button>

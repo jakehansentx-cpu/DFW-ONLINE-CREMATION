@@ -36,6 +36,10 @@ function el(id) {
   return document.getElementById(id);
 }
 
+// Sentinel profileId for a one-off funeral home typed in by hand instead of
+// picked from the list - not one of the saved PROFILES entries.
+const CUSTOM_PROFILE_ID = "__custom__";
+
 function populateProfileSelect() {
   const select = el("profileSelect");
   select.innerHTML = "";
@@ -45,11 +49,45 @@ function populateProfileSelect() {
     opt.textContent = p.cityState ? `${p.funeralHome} — ${p.cityState}` : p.funeralHome;
     select.appendChild(opt);
   }
+  const customOpt = document.createElement("option");
+  customOpt.value = CUSTOM_PROFILE_ID;
+  customOpt.textContent = "Other (type in manually)…";
+  select.appendChild(customOpt);
+}
+
+// Builds a profile-shaped object for a case using a typed-in funeral home,
+// so the sticker generator (which only knows how to read a "profile") can
+// treat it exactly like any saved profile: Metro logo header, italic
+// name/city text, standard disclosure. The id is derived from the typed
+// text itself (not just the CUSTOM_PROFILE_ID sentinel) so a batch with two
+// different hand-typed funeral homes still groups their stickers apart from
+// each other on the printed sheet, the same way two saved profiles would.
+function resolveProfile(c) {
+  if (c.profileId === CUSTOM_PROFILE_ID) {
+    const funeralHome = cleanText(c.customFuneralHome);
+    const cityState = cleanText(c.customCityState);
+    return {
+      id: `${CUSTOM_PROFILE_ID}::${funeralHome}::${cityState}`,
+      funeralHome,
+      cityState,
+      defaultQuantity: 2,
+      preface: PREFACE,
+      disclosure: STANDARD_DISCLOSURE,
+      logo: "metro_logo",
+      headerMode: "logo",
+    };
+  }
+  return findProfile(c.profileId);
+}
+
+function updateCustomFuneralHomeVisibility() {
+  const isCustom = el("profileSelect").value === CUSTOM_PROFILE_ID;
+  el("customFuneralHomeFields").style.display = isCustom ? "grid" : "none";
+  el("customFuneralHomeHint").style.display = isCustom ? "block" : "none";
 }
 
 function readForm() {
   const profileId = el("profileSelect").value;
-  const profile = findProfile(profileId);
   return {
     id: editingId || `case-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     first: el("firstName").value,
@@ -59,6 +97,8 @@ function readForm() {
     cremationDate: el("cremationDate").value,
     discId: el("discId").value,
     profileId,
+    customFuneralHome: el("customFuneralHomeName").value,
+    customCityState: el("customCityState").value,
     labelQuantity: parseInt(el("labelQuantity").value, 10) || 1,
   };
 }
@@ -89,6 +129,9 @@ function validateForm(data) {
   if (cleanText(data.last) === "") missing.push("Last name");
   if (cleanText(data.cremationDate) === "") missing.push("Date of cremation");
   if (cleanText(data.discId) === "") missing.push("I.D. disc number");
+  if (data.profileId === CUSTOM_PROFILE_ID && cleanText(data.customFuneralHome) === "") {
+    missing.push("Funeral home name");
+  }
   return missing;
 }
 
@@ -122,6 +165,9 @@ function editCase(id) {
   el("cremationDate").value = c.cremationDate;
   el("discId").value = c.discId;
   el("profileSelect").value = c.profileId;
+  el("customFuneralHomeName").value = c.customFuneralHome || "";
+  el("customCityState").value = c.customCityState || "";
+  updateCustomFuneralHomeVisibility();
   el("labelQuantity").value = c.labelQuantity;
   el("addButton").textContent = "Save changes";
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -141,7 +187,7 @@ function renderBatch() {
   el("printLabelsBtn").disabled = cases.length === 0;
 
   for (const c of cases) {
-    const profile = findProfile(c.profileId);
+    const profile = resolveProfile(c);
     const tr = document.createElement("tr");
 
     const nameTd = document.createElement("td");
@@ -227,7 +273,7 @@ async function printAllLabels() {
   if (cases.length === 0) return;
   try {
     showStatus("Building sticker sheets...", false);
-    const casesWithProfiles = cases.map((c) => withDecedentName({ ...c, profile: findProfile(c.profileId) || {} }));
+    const casesWithProfiles = cases.map((c) => withDecedentName({ ...c, profile: resolveProfile(c) || {} }));
     const bytes = await buildLabelsPdf(casesWithProfiles, skippedSheetPositions);
     openPdfBlob(bytes, `stickers-${Date.now()}.pdf`);
     showStatus("Opened sticker sheet(s) - use your browser's Print button.", false);
@@ -273,6 +319,8 @@ function init() {
   updateLabelQuantityDefault();
 
   el("profileSelect").addEventListener("change", updateLabelQuantityDefault);
+  el("profileSelect").addEventListener("change", updateCustomFuneralHomeVisibility);
+  updateCustomFuneralHomeVisibility();
   el("addButton").addEventListener("click", addOrUpdateCase);
   el("cancelEditButton").addEventListener("click", clearForm);
   el("printCertsBtn").addEventListener("click", printAllCertificates);
