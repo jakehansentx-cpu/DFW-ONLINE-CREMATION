@@ -44,6 +44,10 @@ const PROFILES = [
     disclosure: STANDARD_DISCLOSURE,
     logo: "pilar_logo",
     headerMode: "logo",
+    // Tall/narrow logo art fills the full default header height with no
+    // breathing room of its own, so it was touching "The Cremated Remains
+    // of" below it - shrink just this profile's header box for clearance.
+    headerLogoBoxHeight: 42,
     printFuneralHome: "",
     printCityState: "",
   },
@@ -68,6 +72,9 @@ const PROFILES = [
     disclosure: STANDARD_DISCLOSURE,
     logo: "allen_family_logo",
     headerMode: "logo",
+    // Same fix as Pilar - logo fills the default header height with no
+    // margin of its own, touching the preface line below it.
+    headerLogoBoxHeight: 42,
     printFuneralHome: "",
     printCityState: "",
   },

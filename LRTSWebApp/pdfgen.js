@@ -263,9 +263,15 @@ async function drawLabel(page, caseData, x, y, w, h, fonts) {
   if (headerMode === "none") {
     // no header
   } else if (headerMode === "logo" && fonts.logoImage) {
+    // Anchored from the box's top edge (fixed at y+h-13 for every profile),
+    // not its bottom, so a profile with a tall/narrow logo (one that fills
+    // the full box height and ends up touching the preface line below it)
+    // can shrink just its own box via headerLogoBoxHeight and get real
+    // clearance at the bottom, without moving anyone else's logo.
+    const boxHeight = profile.headerLogoBoxHeight || 56;
     const [bx, by, bw, bh] = aspectFitBox(
       fonts.logoImage.width, fonts.logoImage.height,
-      x + 92, y + h - 69, 104, 56
+      x + 92, y + h - 13 - boxHeight, 104, boxHeight
     );
     page.drawImage(fonts.logoImage, { x: bx, y: by, width: bw, height: bh });
   } else if (headerMode === "text" && headerLines.length > 0) {
