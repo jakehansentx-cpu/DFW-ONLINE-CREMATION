@@ -85,7 +85,11 @@ const PROFILES = [
     defaultQuantity: 2,
     preface: PREFACE,
     disclosure: STANDARD_DISCLOSURE,
-    logo: "chamberland_logo",
+    // Redesigned per the Avery mock: Metro logo at top, Chamberland's own
+    // logo prints below the name instead (same two-logo layout as Mathis),
+    // no separate city/state line.
+    logo: "metro_logo",
+    secondaryLogo: "chamberland_logo",
     headerMode: "logo",
     printFuneralHome: "",
     printCityState: "",
