@@ -290,10 +290,10 @@ async function drawLabel(page, caseData, x, y, w, h, fonts) {
   if (profile.secondaryLogo && fonts.secondaryLogoImage) {
     const [bx, by, bw, bh] = aspectFitBox(
       fonts.secondaryLogoImage.width, fonts.secondaryLogoImage.height,
-      x + (w - 100) / 2, y + h - 142, 100, 24
+      x + (w - 100) / 2, y + h - 152, 100, 24
     );
     page.drawImage(fonts.secondaryLogoImage, { x: bx, y: by, width: bw, height: bh });
-    fitCentered(page, cityState, y + h - 168, w - 32, fonts.serifBold, 10.5, x + w / 2, BLACK, 6.5);
+    fitCentered(page, cityState, y + h - 170, w - 32, fonts.serifBold, 10.5, x + w / 2, BLACK, 6.5);
   } else {
     fitCentered(page, funeralHome, y + h - 140, w - 32, fonts.serifBold, 10.5, x + w / 2, BLACK, 6.5);
     fitCentered(page, cityState, y + h - 154, w - 32, fonts.serifBold, 10.5, x + w / 2, BLACK, 6.5);
