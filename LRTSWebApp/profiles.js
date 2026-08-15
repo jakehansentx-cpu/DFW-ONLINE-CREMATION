@@ -32,7 +32,12 @@ const PROFILES = [
     defaultQuantity: 4,
     preface: PREFACE,
     disclosure: STANDARD_DISCLOSURE,
-    logo: "martin_oaks_logo",
+    // The "martin_oaks_logo" asset was a leftover data bug from the original
+    // migration - it actually contained a duplicate of the Metro logo, not
+    // a real Martin Oaks logo (confirmed against the original reference
+    // design, which uses the plain Metro header + italic name/city text,
+    // same as most other profiles - Martin Oaks never had its own logo art).
+    logo: "metro_logo",
     headerMode: "logo",
   },
   {
@@ -42,12 +47,12 @@ const PROFILES = [
     defaultQuantity: 1,
     preface: PREFACE,
     disclosure: STANDARD_DISCLOSURE,
-    logo: "pilar_logo",
+    // Redesigned per the official Avery reference: Metro logo at top,
+    // Pilar's own logo prints below the name (same two-logo layout as
+    // Mathis/Chamberland), no separate city/state line.
+    logo: "metro_logo",
+    secondaryLogo: "pilar_logo",
     headerMode: "logo",
-    // Tall/narrow logo art fills the full default header height with no
-    // breathing room of its own, so it was touching "The Cremated Remains
-    // of" below it - shrink just this profile's header box for clearance.
-    headerLogoBoxHeight: 42,
     printFuneralHome: "",
     printCityState: "",
   },
@@ -58,7 +63,8 @@ const PROFILES = [
     defaultQuantity: 2,
     preface: PREFACE,
     disclosure: STANDARD_DISCLOSURE,
-    logo: "mesquite_logo",
+    logo: "metro_logo",
+    secondaryLogo: "mesquite_logo",
     headerMode: "logo",
     printFuneralHome: "",
     printCityState: "",
@@ -70,11 +76,9 @@ const PROFILES = [
     defaultQuantity: 2,
     preface: PREFACE,
     disclosure: STANDARD_DISCLOSURE,
-    logo: "allen_family_logo",
+    logo: "metro_logo",
+    secondaryLogo: "allen_family_logo",
     headerMode: "logo",
-    // Same fix as Pilar - logo fills the default header height with no
-    // margin of its own, touching the preface line below it.
-    headerLogoBoxHeight: 42,
     printFuneralHome: "",
     printCityState: "",
   },
@@ -177,7 +181,10 @@ const PROFILES = [
     defaultQuantity: 6, // Full sheet - preserved deliberately, do not shrink.
     preface: PREFACE,
     disclosure: STANDARD_DISCLOSURE,
-    logo: "hietts_lybrand_logo",
+    // Redesigned per the official Avery reference: Metro logo at top,
+    // Hiett's LyBrand's own logo prints below the name instead.
+    logo: "metro_logo",
+    secondaryLogo: "hietts_lybrand_logo",
     headerMode: "logo",
     printFuneralHome: "",
     printCityState: "",
@@ -196,6 +203,17 @@ const PROFILES = [
     id: "temple-and-sons-oklahoma-city",
     funeralHome: "Temple and Sons Funeral Directors",
     cityState: "Oklahoma City, OK",
+    defaultQuantity: 2,
+    preface: PREFACE,
+    disclosure: STANDARD_DISCLOSURE,
+    logo: null,
+    headerMode: "text",
+    headerText: "Metro Mortuary & Crematory\nSachse, Texas",
+  },
+  {
+    id: "calvary-memorial-funeral-home",
+    funeralHome: "Calvary Memorial Funeral Home",
+    cityState: "Dallas, Texas",
     defaultQuantity: 2,
     preface: PREFACE,
     disclosure: STANDARD_DISCLOSURE,

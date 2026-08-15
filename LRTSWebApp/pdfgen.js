@@ -232,7 +232,9 @@ async function buildLabelsPdf(cases, skipPositions = new Set()) {
   const pdfDoc = await PDFDocument.create();
   const sans = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const sansBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const serifBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
+  // Funeral home name/city text (both as a text header and under a decedent
+  // name) prints in italic per the official Avery reference designs.
+  const serifBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBoldItalic);
 
   const embeddedLogos = {};
   async function getEmbeddedLogo(logoKey) {
