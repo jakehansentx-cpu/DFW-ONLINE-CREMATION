@@ -227,8 +227,9 @@ async function buildLabelsPdf(cases) {
   for (const placement of placements) {
     const page = pages[placement.pageIndex];
     const logoImage = await getEmbeddedLogo(placement.caseData.profile.logo);
+    const secondaryLogoImage = await getEmbeddedLogo(placement.caseData.profile.secondaryLogo);
     await drawLabel(page, placement.caseData, placement.x, placement.y, LABEL_WIDTH, LABEL_HEIGHT, {
-      sans, sansBold, serifBold, logoImage,
+      sans, sansBold, serifBold, logoImage, secondaryLogoImage,
     });
   }
 
@@ -283,8 +284,20 @@ async function drawLabel(page, caseData, x, y, w, h, fonts) {
   }
   drawCentered(page, name, x + w / 2, y + h - 112, fonts.sansBold, nameSize, BLACK);
 
-  fitCentered(page, funeralHome, y + h - 140, w - 32, fonts.serifBold, 10.5, x + w / 2, BLACK, 6.5);
-  fitCentered(page, cityState, y + h - 154, w - 32, fonts.serifBold, 10.5, x + w / 2, BLACK, 6.5);
+  // Some profiles (e.g. Mathis) print a second funeral-home logo in place of
+  // the funeral home's name text, with the city/state line shifted down to
+  // clear it.
+  if (profile.secondaryLogo && fonts.secondaryLogoImage) {
+    const [bx, by, bw, bh] = aspectFitBox(
+      fonts.secondaryLogoImage.width, fonts.secondaryLogoImage.height,
+      x + (w - 100) / 2, y + h - 146, 100, 24
+    );
+    page.drawImage(fonts.secondaryLogoImage, { x: bx, y: by, width: bw, height: bh });
+    fitCentered(page, cityState, y + h - 158, w - 32, fonts.serifBold, 10.5, x + w / 2, BLACK, 6.5);
+  } else {
+    fitCentered(page, funeralHome, y + h - 140, w - 32, fonts.serifBold, 10.5, x + w / 2, BLACK, 6.5);
+    fitCentered(page, cityState, y + h - 154, w - 32, fonts.serifBold, 10.5, x + w / 2, BLACK, 6.5);
+  }
 
   drawDisclosure(page, disclosure, x + w / 2, y, w, fonts.sans);
 }

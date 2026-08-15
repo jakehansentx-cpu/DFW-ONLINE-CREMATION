@@ -234,10 +234,12 @@ const PROFILES = [
     defaultQuantity: 2,
     preface: PREFACE,
     disclosure: STANDARD_DISCLOSURE,
-    logo: "mathis_funeral_home_logo",
+    // Two-logo sticker: Metro logo at the top header, Mathis's own logo
+    // printed where the funeral home's name would otherwise go, with the
+    // city/state line beneath it.
+    logo: "metro_logo",
+    secondaryLogo: "mathis_funeral_home_logo",
     headerMode: "logo",
-    printFuneralHome: "",
-    printCityState: "",
   },
 ];
 
