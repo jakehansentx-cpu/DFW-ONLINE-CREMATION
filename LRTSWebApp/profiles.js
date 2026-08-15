@@ -227,6 +227,18 @@ const PROFILES = [
     headerMode: "text",
     headerText: "Metro Mortuary & Crematory\nSachse, Texas",
   },
+  {
+    id: "mathis-funeral-home",
+    funeralHome: "Mathis Funeral Home",
+    cityState: "Dexter, Missouri",
+    defaultQuantity: 2,
+    preface: PREFACE,
+    disclosure: STANDARD_DISCLOSURE,
+    logo: "mathis_funeral_home_logo",
+    headerMode: "logo",
+    printFuneralHome: "",
+    printCityState: "",
+  },
 ];
 
 function findProfile(id) {
