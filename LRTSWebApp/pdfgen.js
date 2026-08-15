@@ -286,7 +286,10 @@ async function drawLabel(page, caseData, x, y, w, h, fonts) {
     : cleanText(profile.cityState || "");
   const name = displayName(caseData.decedentName);
   const preface = cleanText(profile.preface || "The Cremated Remains of");
-  const disclosure = cleanText(profile.disclosure || "");
+  // Golden rule: every sticker prints a disclosure, no exceptions - never
+  // fall back to blank here, even if a profile's own disclosure field is
+  // empty or missing.
+  const disclosure = cleanText(profile.disclosure) || STANDARD_DISCLOSURE;
 
   const headerMode = cleanText(profile.headerMode || (fonts.logoImage ? "logo" : "name")).toLowerCase();
   const headerLines = (profile.headerText || "").split("\n").map(cleanText).filter((l) => l !== "");

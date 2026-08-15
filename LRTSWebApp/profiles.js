@@ -3,11 +3,16 @@
 // funeral_home_profiles.json / IMPORTED_AVERY_TEMPLATE_NOTES.md. See that
 // file's comments for the noted exceptions (Lavon's missing design link,
 // the consolidated Sachse alternate reference, Princeton using only its own
-// page, Commerce's blank disclosure, Hiett's full-sheet default of 6).
+// page, Hiett's full-sheet default of 6).
 //
 // printFuneralHome / printCityState: `null` means "not set, fall back to
 // funeralHome/cityState on the label"; `""` means "explicitly blank, print
 // nothing" (several profiles' logo art already shows the name).
+//
+// Golden rule (enforced in pdfgen.js, not just here): every sticker prints
+// a disclosure line, with no exceptions - a profile's `disclosure` field
+// can be customized, but never removed. If it's ever blank, pdfgen.js
+// falls back to STANDARD_DISCLOSURE rather than printing nothing.
 
 const STANDARD_DISCLOSURE =
   "Disclosure: This temporary container is not intended for the permanent storage of cremated remains " +
