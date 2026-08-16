@@ -14,7 +14,12 @@
 // brittle text parsing needed.
 
 const GEMINI_API_KEY_STORAGE_KEY = "metroApp.geminiApiKey";
-const GEMINI_MODEL = "gemini-2.5-flash";
+// Google periodically retires older model versions (gemini-2.5-flash itself
+// got retired for new API keys after this was first written). If scanning
+// starts failing with a "model ... is no longer available" error, check
+// https://aistudio.google.com/models for the current free-tier Flash model
+// name and update this constant.
+const GEMINI_MODEL = "gemini-3.7-flash";
 // Images are internally capped around this edge length anyway, so sending
 // anything larger just wastes upload time on (often slow) office wifi
 // without improving accuracy.
