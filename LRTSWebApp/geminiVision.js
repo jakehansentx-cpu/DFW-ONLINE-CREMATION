@@ -95,55 +95,89 @@ const NAME_RESPONSE_SCHEMA = {
   required: ["found", "firstName", "middleName", "lastName", "suffix"],
 };
 
+// Google's free-tier Flash models occasionally return 503 ("high demand")
+// or 429 (rate limited) for a moment under load - both are transient, so
+// they're worth a couple of automatic retries with backoff before giving
+// up, rather than making the user notice and re-click themselves.
+const TRANSIENT_STATUS_CODES = new Set([429, 503]);
+const RETRY_DELAYS_MS = [1500, 4000];
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // Sends a photo or PDF of the permit to Gemini and returns
 // {found, firstName, middleName, lastName, suffix}. PDFs are sent as-is
 // (Gemini reads embedded text or scanned pages either way); images are
-// downscaled/re-encoded first (see resizeImageForUpload).
-async function extractNameFromBtpFile(file, apiKey) {
+// downscaled/re-encoded first (see resizeImageForUpload). onRetry, if
+// given, is called with the attempt number (2, 3, ...) before each retry.
+async function extractNameFromBtpFile(file, apiKey, onRetry) {
   const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
   const mimeType = isPdf ? "application/pdf" : "image/jpeg";
   const base64Data = isPdf ? await blobToBase64(file) : await blobToBase64(await resizeImageForUpload(file));
 
-  let response;
-  try {
-    response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+  const requestBody = JSON.stringify({
+    contents: [
       {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [
-                { inline_data: { mime_type: mimeType, data: base64Data } },
-                {
-                  text:
-                    "This is a Texas Burial-Transit Permit (either a photo of the printed form, " +
-                    "or the original PDF). Find the \"Name of Deceased\" field - it may be one " +
-                    "line, or split into separate First/Middle/Last columns - and report the name.",
-                },
-              ],
-            },
-          ],
-          generationConfig: {
-            responseMimeType: "application/json",
-            responseSchema: NAME_RESPONSE_SCHEMA,
+        role: "user",
+        parts: [
+          { inline_data: { mime_type: mimeType, data: base64Data } },
+          {
+            text:
+              "This is a Texas Burial-Transit Permit (either a photo of the printed form, " +
+              "or the original PDF). Find the \"Name of Deceased\" field - it may be one " +
+              "line, or split into separate First/Middle/Last columns - and report the name.",
           },
-        }),
-      }
-    );
-  } catch (error) {
-    if (error instanceof TypeError) {
-      throw new Error("Could not reach Google - check your internet connection and try again.");
-    }
-    throw error;
-  }
+        ],
+      },
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: NAME_RESPONSE_SCHEMA,
+    },
+  });
 
-  if (!response.ok) {
+  const totalAttempts = RETRY_DELAYS_MS.length + 1;
+  for (let attempt = 1; attempt <= totalAttempts; attempt++) {
+    let response;
+    try {
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
+          body: requestBody,
+        }
+      );
+    } catch (error) {
+      if (error instanceof TypeError) {
+        throw new Error("Could not reach Google - check your internet connection and try again.");
+      }
+      throw error;
+    }
+
+    if (response.ok) {
+      const data = await response.json();
+      const text = data.candidates && data.candidates[0] && data.candidates[0].content
+        && data.candidates[0].content.parts && data.candidates[0].content.parts[0]
+        && data.candidates[0].content.parts[0].text;
+      if (!text) throw new Error("Gemini did not return a recognized result.");
+      try {
+        return JSON.parse(text);
+      } catch {
+        throw new Error("Gemini returned an unexpected response.");
+      }
+    }
+
+    if (TRANSIENT_STATUS_CODES.has(response.status) && attempt < totalAttempts) {
+      if (onRetry) onRetry(attempt + 1, totalAttempts);
+      await sleep(RETRY_DELAYS_MS[attempt - 1]);
+      continue;
+    }
+
     const bodyText = await response.text().catch(() => "");
     let message = bodyText;
     try {
@@ -155,16 +189,5 @@ async function extractNameFromBtpFile(file, apiKey) {
       throw new Error("That API key was rejected - check it at the top of the form and try again.");
     }
     throw new Error(`Gemini API error (${response.status}): ${message.slice(0, 200)}`);
-  }
-
-  const data = await response.json();
-  const text = data.candidates && data.candidates[0] && data.candidates[0].content
-    && data.candidates[0].content.parts && data.candidates[0].content.parts[0]
-    && data.candidates[0].content.parts[0].text;
-  if (!text) throw new Error("Gemini did not return a recognized result.");
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error("Gemini returned an unexpected response.");
   }
 }

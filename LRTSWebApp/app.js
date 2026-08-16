@@ -333,7 +333,9 @@ async function handleBtpFileSelected(event) {
   statusEl.textContent = "Reading with Gemini...";
 
   try {
-    const result = await extractNameFromBtpFile(file, apiKey);
+    const result = await extractNameFromBtpFile(file, apiKey, (attempt, totalAttempts) => {
+      statusEl.textContent = `Google's servers are busy - retrying (${attempt}/${totalAttempts})...`;
+    });
     if (!result.found) {
       statusEl.textContent = "Could not find a name in that file - please type it in manually below.";
       return;
