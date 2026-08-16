@@ -311,7 +311,7 @@ function resetSheetLayout() {
 }
 
 // Reads the decedent's name off a photo of a Burial-Transit Permit via the
-// Claude API and pre-fills the name fields - never adds anything to the
+// Gemini API and pre-fills the name fields - never adds anything to the
 // batch by itself. The user still has to look at what got filled in and
 // press "Add to batch" themselves, same as if they'd typed it by hand; this
 // is a shortcut for typing, not a replacement for checking the result.
@@ -323,13 +323,13 @@ async function handleBtpPhotoSelected(event) {
   const statusEl = el("ocrStatus");
   statusEl.style.display = "block";
 
-  const apiKey = getSavedClaudeApiKey();
+  const apiKey = getSavedGeminiApiKey();
   if (!apiKey) {
-    statusEl.textContent = "Enter your Anthropic API key above first, or just type the name in manually below.";
+    statusEl.textContent = "Enter your Google (Gemini) API key above first, or just type the name in manually below.";
     return;
   }
 
-  statusEl.textContent = "Reading photo with Claude...";
+  statusEl.textContent = "Reading photo with Gemini...";
 
   try {
     const result = await extractNameFromBtpPhoto(file, apiKey);
@@ -353,20 +353,20 @@ async function handleBtpPhotoSelected(event) {
 // Shows the saved-key confirmation (with a "Change it" link) when a key is
 // already stored, or the input row when one still needs to be entered.
 function updateApiKeyUi() {
-  const hasKey = getSavedClaudeApiKey() !== "";
+  const hasKey = getSavedGeminiApiKey() !== "";
   el("apiKeyRow").style.display = hasKey ? "none" : "flex";
   el("apiKeySavedHint").style.display = hasKey ? "block" : "none";
 }
 
 function saveApiKeyFromInput() {
-  const key = el("claudeApiKeyInput").value.trim();
+  const key = el("geminiApiKeyInput").value.trim();
   if (!key) return;
-  saveClaudeApiKey(key);
+  saveGeminiApiKey(key);
   updateApiKeyUi();
 }
 
 function changeApiKey() {
-  el("claudeApiKeyInput").value = getSavedClaudeApiKey();
+  el("geminiApiKeyInput").value = getSavedGeminiApiKey();
   el("apiKeyRow").style.display = "flex";
   el("apiKeySavedHint").style.display = "none";
 }

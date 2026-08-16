@@ -19,22 +19,22 @@
       <h3>Fill in the name from a photo (optional)</h3>
       <p class="hint">
         Take a photo of the printed Burial-Transit Permit, then choose it below -
-        Claude (Anthropic's AI) reads the decedent's name off the photo and fills
+        Google's Gemini AI reads the decedent's name off the photo and fills
         it into the fields below for you to check. This step is entirely optional;
         you can always just type the name in directly instead, and nothing is
         added to the batch until you press "Add to batch" yourself.
       </p>
       <p class="hint">
         Unlike the rest of this app, this one step needs the internet: that photo
-        is sent to Anthropic to be read, then discarded. Nothing else here ever
+        is sent to Google to be read, then discarded. Nothing else here ever
         leaves this computer.
       </p>
       <div class="apiKeyRow" id="apiKeyRow">
-        <label>Anthropic API key
-          <input type="password" id="claudeApiKeyInput" autocomplete="off" placeholder="sk-ant-...">
+        <label>Google (Gemini) API key
+          <input type="password" id="geminiApiKeyInput" autocomplete="off" placeholder="AIza...">
         </label>
         <button type="button" id="saveApiKeyBtn" class="secondary">Save key</button>
-        <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Get an API key</a>
+        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a free API key</a>
       </div>
       <p class="hint" id="apiKeySavedHint" style="display:none;">
         API key saved on this computer.
@@ -143,7 +143,7 @@
 </main>
 
 <script src="lib/pdf-lib.min.js"></script>
-<script src="claudeVision.js"></script>
+<script src="geminiVision.js"></script>
 <script src="logos.js"></script>
 <script src="profiles.js"></script>
 <script src="text.js"></script>

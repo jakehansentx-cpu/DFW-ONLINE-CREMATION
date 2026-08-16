@@ -15,7 +15,7 @@ const read = (name) => fs.readFileSync(path.join(DIR, name), "utf8");
 const html = read("index.html");
 const css = read("styles.css");
 const pdfLib = read("lib/pdf-lib.min.js");
-const claudeVision = read("claudeVision.js");
+const geminiVision = read("geminiVision.js");
 const logos = read("logos.js");
 const profiles = read("profiles.js");
 const text = read("text.js");
@@ -36,7 +36,7 @@ out = out.replace(
 );
 const scriptReplacements = [
   ['<script src="lib/pdf-lib.min.js"></script>', pdfLib],
-  ['<script src="claudeVision.js"></script>', claudeVision],
+  ['<script src="geminiVision.js"></script>', geminiVision],
   ['<script src="logos.js"></script>', logos],
   ['<script src="profiles.js"></script>', profiles],
   ['<script src="text.js"></script>', text],
