@@ -65,20 +65,34 @@ const CERT_CENTER_X = CERT_PAGE_WIDTH / 2;
 const CERT_BLUE = rgb(0x00 / 255, 0x3a / 255, 0x9b / 255);
 const BLACK = rgb(0, 0, 0);
 
+// Cases missing a cremation date or disc number are skipped rather than
+// blocking the whole run - the batch commonly mixes complete cases with a
+// stickers-only reprint (no date/disc known or needed), and one incomplete
+// case shouldn't stop everyone else's certificate from printing. A blank
+// decedent name is still a hard error: the UI never allows adding a case
+// without one, so seeing it here means something is actually broken.
 async function buildCertificatePdf(cases) {
   const pdfDoc = await PDFDocument.create();
   const sans = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const sansBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
+  const skipped = [];
+  const eligibleCases = [];
   for (const c of cases) {
+    if (cleanText(c.decedentName) === "") {
+      throw new Error("A decedent name is required for every case before printing certificates.");
+    }
     const missing = [];
-    if (cleanText(c.decedentName) === "") missing.push("Decedent name");
-    if (cleanText(c.cremationDate) === "") missing.push("Date of cremation");
+    if (cleanText(c.cremationDate) === "") missing.push("date of cremation");
     if (cleanText(c.discId) === "") missing.push("I.D. disc number");
     if (missing.length > 0) {
-      throw new Error(`${c.decedentName || "(unnamed case)"}: missing ${missing.join(", ")}`);
+      skipped.push(`${c.decedentName} (missing ${missing.join(" and ")})`);
+      continue;
     }
+    eligibleCases.push(c);
+  }
 
+  for (const c of eligibleCases) {
     const page = pdfDoc.addPage([CERT_PAGE_WIDTH, CERT_PAGE_HEIGHT]);
     page.drawRectangle({
       x: 10, y: 10, width: CERT_PAGE_WIDTH - 20, height: CERT_PAGE_HEIGHT - 20,
@@ -121,7 +135,7 @@ async function buildCertificatePdf(cases) {
     fitCentered(page, cleanText(c.discId), 39, 200, sansBold, 14, CERT_CENTER_X, BLACK);
   }
 
-  return pdfDoc.save();
+  return { bytes: await pdfDoc.save(), skipped };
 }
 
 // ---- Labels (LabelSheetGenerator.kt + LabelPagination.kt) ----

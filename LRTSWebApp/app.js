@@ -123,18 +123,18 @@ function updateLabelQuantityDefault() {
   }
 }
 
-// I.D. disc number is deliberately NOT required here - it's only used on
-// the certificate (buildCertificatePdf has its own check for that, and
-// blocks certificate printing on a case missing it, with a clear error).
-// Stickers never print a disc number, so a case can be added to the batch
-// and have its sticker printed with the disc number left blank - useful
-// for a stickers-only run, or a certificate-only reprint later once the
-// disc number is known.
+// I.D. disc number and cremation date are deliberately NOT required here -
+// both are only used on the certificate (buildCertificatePdf skips any case
+// missing either one rather than printing it, and printAllCertificates
+// disables its own button / warns when nothing in the batch qualifies).
+// Stickers never print either field, so a case can be added to the batch
+// and have its sticker printed with both left blank - useful for a
+// stickers-only run (e.g. reprinting one missing sticker) without having to
+// fill in placeholder data that risks later printing the wrong certificate.
 function validateForm(data) {
   const missing = [];
   if (cleanText(data.first) === "") missing.push("First name");
   if (cleanText(data.last) === "") missing.push("Last name");
-  if (cleanText(data.cremationDate) === "") missing.push("Date of cremation");
   if (data.profileId === CUSTOM_PROFILE_ID && cleanText(data.customFuneralHome) === "") {
     missing.push("Funeral home name");
   }
@@ -189,7 +189,14 @@ function renderBatch() {
   const tbody = el("batchTableBody");
   tbody.innerHTML = "";
   el("batchCount").textContent = cases.length;
-  el("printCertsBtn").disabled = cases.length === 0;
+  // Disabled whenever nothing in the batch has both fields a certificate
+  // needs - e.g. a batch that's only a stickers-only reprint - so there's
+  // no button to accidentally click that would print nothing (or, worse,
+  // require typing in placeholder data just to get past it).
+  const certEligibleCount = cases.filter(
+    (c) => cleanText(c.cremationDate) !== "" && cleanText(c.discId) !== ""
+  ).length;
+  el("printCertsBtn").disabled = certEligibleCount === 0;
   el("printLabelsBtn").disabled = cases.length === 0;
 
   for (const c of cases) {
@@ -267,9 +274,22 @@ async function printAllCertificates() {
   if (cases.length === 0) return;
   try {
     showStatus("Building certificates...", false);
-    const bytes = await buildCertificatePdf(cases.map(withDecedentName));
+    const { bytes, skipped } = await buildCertificatePdf(cases.map(withDecedentName));
+    const printedCount = cases.length - skipped.length;
+    if (printedCount === 0) {
+      showStatus(
+        "No cases in the batch have both a cremation date and I.D. disc number, so there's nothing " +
+          "to certify - use Print All Stickers for a stickers-only run.",
+        true
+      );
+      return;
+    }
     openPdfBlob(bytes, `certificates-${Date.now()}.pdf`);
-    showStatus(`Opened ${cases.length} certificate(s) - use your browser's Print button.`, false);
+    let message = `Opened ${printedCount} certificate(s) - use your browser's Print button.`;
+    if (skipped.length > 0) {
+      message += ` Skipped (missing date and/or disc number): ${skipped.join("; ")}.`;
+    }
+    showStatus(message, false);
   } catch (error) {
     showStatus(error.message || String(error), true);
   }
