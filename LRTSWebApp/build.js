@@ -15,6 +15,10 @@ const read = (name) => fs.readFileSync(path.join(DIR, name), "utf8");
 const html = read("index.html");
 const css = read("styles.css");
 const pdfLib = read("lib/pdf-lib.min.js");
+const tesseractLib = read("lib/tesseract-lib.js");
+const ocrAssets = read("ocr-assets.js");
+const ocr = read("ocr.js");
+const btpExtraction = read("btpExtraction.js");
 const logos = read("logos.js");
 const profiles = read("profiles.js");
 const text = read("text.js");
@@ -35,6 +39,10 @@ out = out.replace(
 );
 const scriptReplacements = [
   ['<script src="lib/pdf-lib.min.js"></script>', pdfLib],
+  ['<script src="lib/tesseract-lib.js"></script>', tesseractLib],
+  ['<script src="ocr-assets.js"></script>', ocrAssets],
+  ['<script src="ocr.js"></script>', ocr],
+  ['<script src="btpExtraction.js"></script>', btpExtraction],
   ['<script src="logos.js"></script>', logos],
   ['<script src="profiles.js"></script>', profiles],
   ['<script src="text.js"></script>', text],

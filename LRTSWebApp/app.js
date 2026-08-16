@@ -310,6 +310,40 @@ function resetSheetLayout() {
   renderSheetGrid();
 }
 
+// Reads the decedent's name off a photo of a Burial-Transit Permit via
+// on-device OCR and pre-fills the name fields - never adds anything to the
+// batch by itself. The user still has to look at what got filled in and
+// press "Add to batch" themselves, same as if they'd typed it by hand; this
+// is a shortcut for typing, not a replacement for checking the result.
+async function handleBtpPhotoSelected(event) {
+  const file = event.target.files[0];
+  event.target.value = ""; // allow re-selecting the same file next time
+  if (!file) return;
+
+  const statusEl = el("ocrStatus");
+  statusEl.style.display = "block";
+  statusEl.textContent = "Reading photo... this can take a few seconds, longer the first time.";
+
+  try {
+    const text = await recognizeImageText(file, (progress) => {
+      statusEl.textContent = `Reading photo... ${Math.round(progress * 100)}%`;
+    });
+    const name = extractBtpName(text);
+    if (!name) {
+      statusEl.textContent = "Could not find a name on that photo - please type it in manually below.";
+      return;
+    }
+    const parts = splitLegalName(name);
+    el("firstName").value = parts.first;
+    el("middleName").value = parts.middle;
+    el("lastName").value = parts.last;
+    el("suffixName").value = parts.suffix;
+    statusEl.textContent = `Found "${name}" - check it below before adding to the batch.`;
+  } catch (error) {
+    statusEl.textContent = "Could not read that photo: " + (error.message || String(error));
+  }
+}
+
 function clearWholeBatch() {
   if (cases.length === 0) return;
   if (!confirm(`Remove all ${cases.length} case(s) from the batch? This cannot be undone.`)) return;
@@ -332,6 +366,7 @@ function init() {
   el("printCertsBtn").addEventListener("click", printAllCertificates);
   el("printLabelsBtn").addEventListener("click", printAllLabels);
   el("clearBatchBtn").addEventListener("click", clearWholeBatch);
+  el("btpPhotoInput").addEventListener("change", handleBtpPhotoSelected);
 
   document.querySelectorAll("#sheetGrid .sheetCell").forEach((cell) => {
     cell.addEventListener("click", () => toggleSheetPosition(parseInt(cell.dataset.position, 10)));

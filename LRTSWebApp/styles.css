@@ -66,6 +66,32 @@ main {
   margin-bottom: 16px;
 }
 
+.ocrCard {
+  margin-bottom: 16px;
+  padding: 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.ocrCard h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.ocrCard .hint {
+  margin: 0 0 10px;
+}
+
+.ocrCard input[type="file"] {
+  font-size: 14px;
+}
+
+#ocrStatus {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
 label {
   display: flex;
   flex-direction: column;
