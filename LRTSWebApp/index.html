@@ -19,10 +19,26 @@
       <h3>Fill in the name from a photo (optional)</h3>
       <p class="hint">
         Take a photo of the printed Burial-Transit Permit, then choose it below -
-        the decedent's name is read automatically and filled into the fields below
-        for you to check. This step is entirely optional; you can always just type
-        the name in directly instead, and nothing is added to the batch until you
-        press "Add to batch" yourself.
+        Claude (Anthropic's AI) reads the decedent's name off the photo and fills
+        it into the fields below for you to check. This step is entirely optional;
+        you can always just type the name in directly instead, and nothing is
+        added to the batch until you press "Add to batch" yourself.
+      </p>
+      <p class="hint">
+        Unlike the rest of this app, this one step needs the internet: that photo
+        is sent to Anthropic to be read, then discarded. Nothing else here ever
+        leaves this computer.
+      </p>
+      <div class="apiKeyRow" id="apiKeyRow">
+        <label>Anthropic API key
+          <input type="password" id="claudeApiKeyInput" autocomplete="off" placeholder="sk-ant-...">
+        </label>
+        <button type="button" id="saveApiKeyBtn" class="secondary">Save key</button>
+        <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Get an API key</a>
+      </div>
+      <p class="hint" id="apiKeySavedHint" style="display:none;">
+        API key saved on this computer.
+        <button type="button" id="changeApiKeyBtn" class="linkButton">Change it</button>
       </p>
       <input type="file" id="btpPhotoInput" accept="image/*">
       <div id="ocrStatus" class="hint" style="display:none;"></div>
@@ -120,10 +136,7 @@
 </main>
 
 <script src="lib/pdf-lib.min.js"></script>
-<script src="lib/tesseract-lib.js"></script>
-<script src="ocr-assets.js"></script>
-<script src="ocr.js"></script>
-<script src="btpExtraction.js"></script>
+<script src="claudeVision.js"></script>
 <script src="logos.js"></script>
 <script src="profiles.js"></script>
 <script src="text.js"></script>

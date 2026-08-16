@@ -310,8 +310,8 @@ function resetSheetLayout() {
   renderSheetGrid();
 }
 
-// Reads the decedent's name off a photo of a Burial-Transit Permit via
-// on-device OCR and pre-fills the name fields - never adds anything to the
+// Reads the decedent's name off a photo of a Burial-Transit Permit via the
+// Claude API and pre-fills the name fields - never adds anything to the
 // batch by itself. The user still has to look at what got filled in and
 // press "Add to batch" themselves, same as if they'd typed it by hand; this
 // is a shortcut for typing, not a replacement for checking the result.
@@ -322,26 +322,53 @@ async function handleBtpPhotoSelected(event) {
 
   const statusEl = el("ocrStatus");
   statusEl.style.display = "block";
-  statusEl.textContent = "Reading photo... this can take a few seconds, longer the first time.";
+
+  const apiKey = getSavedClaudeApiKey();
+  if (!apiKey) {
+    statusEl.textContent = "Enter your Anthropic API key above first, or just type the name in manually below.";
+    return;
+  }
+
+  statusEl.textContent = "Reading photo with Claude...";
 
   try {
-    const text = await recognizeImageText(file, (progress) => {
-      statusEl.textContent = `Reading photo... ${Math.round(progress * 100)}%`;
-    });
-    const name = extractBtpName(text);
-    if (!name) {
+    const result = await extractNameFromBtpPhoto(file, apiKey);
+    if (!result.found) {
       statusEl.textContent = "Could not find a name on that photo - please type it in manually below.";
       return;
     }
-    const parts = splitLegalName(name);
-    el("firstName").value = parts.first;
-    el("middleName").value = parts.middle;
-    el("lastName").value = parts.last;
-    el("suffixName").value = parts.suffix;
-    statusEl.textContent = `Found "${name}" - check it below before adding to the batch.`;
+    el("firstName").value = result.firstName || "";
+    el("middleName").value = result.middleName || "";
+    el("lastName").value = result.lastName || "";
+    el("suffixName").value = result.suffix || "";
+    const foundName = [result.firstName, result.middleName, result.lastName, result.suffix]
+      .filter((part) => part)
+      .join(" ");
+    statusEl.textContent = `Found "${foundName}" - check it below before adding to the batch.`;
   } catch (error) {
     statusEl.textContent = "Could not read that photo: " + (error.message || String(error));
   }
+}
+
+// Shows the saved-key confirmation (with a "Change it" link) when a key is
+// already stored, or the input row when one still needs to be entered.
+function updateApiKeyUi() {
+  const hasKey = getSavedClaudeApiKey() !== "";
+  el("apiKeyRow").style.display = hasKey ? "none" : "flex";
+  el("apiKeySavedHint").style.display = hasKey ? "block" : "none";
+}
+
+function saveApiKeyFromInput() {
+  const key = el("claudeApiKeyInput").value.trim();
+  if (!key) return;
+  saveClaudeApiKey(key);
+  updateApiKeyUi();
+}
+
+function changeApiKey() {
+  el("claudeApiKeyInput").value = getSavedClaudeApiKey();
+  el("apiKeyRow").style.display = "flex";
+  el("apiKeySavedHint").style.display = "none";
 }
 
 function clearWholeBatch() {
@@ -367,6 +394,9 @@ function init() {
   el("printLabelsBtn").addEventListener("click", printAllLabels);
   el("clearBatchBtn").addEventListener("click", clearWholeBatch);
   el("btpPhotoInput").addEventListener("change", handleBtpPhotoSelected);
+  el("saveApiKeyBtn").addEventListener("click", saveApiKeyFromInput);
+  el("changeApiKeyBtn").addEventListener("click", changeApiKey);
+  updateApiKeyUi();
 
   document.querySelectorAll("#sheetGrid .sheetCell").forEach((cell) => {
     cell.addEventListener("click", () => toggleSheetPosition(parseInt(cell.dataset.position, 10)));
