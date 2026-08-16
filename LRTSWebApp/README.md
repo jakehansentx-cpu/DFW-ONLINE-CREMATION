@@ -40,13 +40,14 @@ accidental tab close won't lose your work — it'll still be there next time
 you open `index.html` in the same browser on this computer. It is **not**
 synced anywhere else; a different computer or browser starts empty.
 
-## Reading a name from a photo
+## Reading a name from a photo or PDF
 
-The "Fill in the name from a photo" card on the form lets you take a photo
-of a printed Burial-Transit Permit and have Google's Gemini AI read the
-decedent's name off it, pre-filling the First/Middle/Last/Suffix fields for
-you to check — nothing is added to the batch until you click **Add to
-batch** yourself, same as typing it in by hand.
+The top of the form has three buttons — **Take a Photo**, **Upload Photo**,
+and **Upload PDF** — that let Google's Gemini AI read the decedent's name
+straight off a Burial-Transit Permit (printed and photographed, or the
+original PDF) and pre-fill the First/Middle/Last/Suffix fields for you to
+check. Nothing is added to the batch until you click **Add to batch**
+yourself, same as typing it in by hand.
 
 This is the one part of the app that needs the internet and a Google API
 key:
@@ -56,12 +57,14 @@ key:
    billing setup for the volume this app expects).
 2. Paste it into the "Google (Gemini) API key" field and click **Save key**
    — it's stored only in this browser's local storage on this computer, the
-   same way the batch list is, and is sent only to Google's API.
-3. Choose or take a photo. That one photo is uploaded to Google to be read,
-   then discarded; nothing else in the app leaves this computer.
+   same way the batch list is, and is sent only to Google's API. Once
+   saved, this field disappears until you click "Change it."
+3. Take a photo, upload a photo, or upload a PDF. That one file is uploaded
+   to Google to be read, then discarded; nothing else in the app leaves
+   this computer.
 
 If you'd rather not use this at all, just leave the key blank and type the
-name in manually as before — the field never requires a photo.
+name in manually as before — none of the three buttons are required.
 
 ## What's reused from the Android app
 
@@ -75,8 +78,9 @@ Android app produces for a single case.
 
 ## What's different from the Android app
 
-- Can optionally fill in the name from a photo of a printed Burial-Transit
-  Permit, via the Gemini API (see "Reading a name from a photo" below) — the
+- Can optionally fill in the name from a photo or PDF of a Burial-Transit
+  Permit, via the Gemini API (see "Reading a name from a photo or PDF"
+  below) — the
   Android app's OCR uses on-device ML Kit instead.
 - No persistent funeral-home profile editor (Manage Funeral Homes) — the 20
   imported profiles are fixed. If you need to add or edit a profile, let

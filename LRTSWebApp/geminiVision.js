@@ -1,13 +1,13 @@
-// Reads the decedent's name off a photo of a printed Burial-Transit Permit
+// Reads the decedent's name off a photo or PDF of a Burial-Transit Permit
 // using Google's Gemini API, instead of Claude or the on-device OCR this
 // app used to have. Chosen for its free tier - no billing/credit card
 // required for the volume this app expects, unlike Claude or OpenAI.
 //
 // This is the one part of the app that needs the internet and a Google API
-// key: the photo is uploaded to Google's API to be read, then discarded.
+// key: the file is uploaded to Google's API to be read, then discarded.
 // Nothing else in this app ever leaves this computer - see the key entered
-// under "Fill in the name from a photo," stored only in this browser's
-// local storage (specific to this computer/file location).
+// at the top of the form, stored only in this browser's local storage
+// (specific to this computer/file location).
 //
 // Controlled generation (responseSchema) is used instead of free-text
 // parsing, so the response is guaranteed to be valid, structured JSON - no
@@ -90,10 +90,14 @@ const NAME_RESPONSE_SCHEMA = {
   required: ["found", "firstName", "middleName", "lastName", "suffix"],
 };
 
-// Sends the photo to Gemini and returns {found, firstName, middleName, lastName, suffix}.
-async function extractNameFromBtpPhoto(file, apiKey) {
-  const resized = await resizeImageForUpload(file);
-  const base64Data = await blobToBase64(resized);
+// Sends a photo or PDF of the permit to Gemini and returns
+// {found, firstName, middleName, lastName, suffix}. PDFs are sent as-is
+// (Gemini reads embedded text or scanned pages either way); images are
+// downscaled/re-encoded first (see resizeImageForUpload).
+async function extractNameFromBtpFile(file, apiKey) {
+  const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+  const mimeType = isPdf ? "application/pdf" : "image/jpeg";
+  const base64Data = isPdf ? await blobToBase64(file) : await blobToBase64(await resizeImageForUpload(file));
 
   let response;
   try {
@@ -110,12 +114,12 @@ async function extractNameFromBtpPhoto(file, apiKey) {
             {
               role: "user",
               parts: [
-                { inline_data: { mime_type: "image/jpeg", data: base64Data } },
+                { inline_data: { mime_type: mimeType, data: base64Data } },
                 {
                   text:
-                    "This is a photo of a printed Texas Burial-Transit Permit. Find the " +
-                    "\"Name of Deceased\" field - it may be one line, or split into separate " +
-                    "First/Middle/Last columns - and report the name.",
+                    "This is a Texas Burial-Transit Permit (either a photo of the printed form, " +
+                    "or the original PDF). Find the \"Name of Deceased\" field - it may be one " +
+                    "line, or split into separate First/Middle/Last columns - and report the name.",
                 },
               ],
             },
@@ -143,7 +147,7 @@ async function extractNameFromBtpPhoto(file, apiKey) {
       // not JSON - use the raw body text as-is
     }
     if (response.status === 400 && /api key not valid|api_key_invalid/i.test(message)) {
-      throw new Error('That API key was rejected - check it under "Fill in the name from a photo" and try again.');
+      throw new Error("That API key was rejected - check it at the top of the form and try again.");
     }
     throw new Error(`Gemini API error (${response.status}): ${message.slice(0, 200)}`);
   }

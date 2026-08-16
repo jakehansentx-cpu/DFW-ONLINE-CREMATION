@@ -14,21 +14,8 @@
 
 <main>
   <section class="card">
-    <h2 id="formHeading">Add a case to the batch</h2>
+    <h2 id="formHeading">Create labels and certificate</h2>
     <div class="ocrCard">
-      <h3>Fill in the name from a photo (optional)</h3>
-      <p class="hint">
-        Take a photo of the printed Burial-Transit Permit, then choose it below -
-        Google's Gemini AI reads the decedent's name off the photo and fills
-        it into the fields below for you to check. This step is entirely optional;
-        you can always just type the name in directly instead, and nothing is
-        added to the batch until you press "Add to batch" yourself.
-      </p>
-      <p class="hint">
-        Unlike the rest of this app, this one step needs the internet: that photo
-        is sent to Google to be read, then discarded. Nothing else here ever
-        leaves this computer.
-      </p>
       <div class="apiKeyRow" id="apiKeyRow">
         <label>Google (Gemini) API key
           <input type="password" id="geminiApiKeyInput" autocomplete="off" placeholder="AIza...">
@@ -41,11 +28,14 @@
         <button type="button" id="changeApiKeyBtn" class="linkButton">Change it</button>
       </p>
       <div class="photoInputRow">
-        <label class="fileButton">Take a photo
+        <label class="fileButton">Take a Photo
           <input type="file" id="btpPhotoCameraInput" accept="image/*" capture="environment">
         </label>
-        <label class="fileButton">Choose an existing photo
+        <label class="fileButton">Upload Photo
           <input type="file" id="btpPhotoInput" accept="image/*">
+        </label>
+        <label class="fileButton">Upload PDF
+          <input type="file" id="btpPdfInput" accept="application/pdf">
         </label>
       </div>
       <div id="ocrStatus" class="hint" style="display:none;"></div>

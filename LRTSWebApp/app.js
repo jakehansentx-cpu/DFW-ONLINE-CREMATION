@@ -310,12 +310,13 @@ function resetSheetLayout() {
   renderSheetGrid();
 }
 
-// Reads the decedent's name off a photo of a Burial-Transit Permit via the
-// Gemini API and pre-fills the name fields - never adds anything to the
-// batch by itself. The user still has to look at what got filled in and
-// press "Add to batch" themselves, same as if they'd typed it by hand; this
-// is a shortcut for typing, not a replacement for checking the result.
-async function handleBtpPhotoSelected(event) {
+// Reads the decedent's name off a photo or PDF of a Burial-Transit Permit
+// via the Gemini API and pre-fills the name fields - never adds anything to
+// the batch by itself. The user still has to look at what got filled in
+// and press "Add to batch" themselves, same as if they'd typed it by hand;
+// this is a shortcut for typing, not a replacement for checking the result.
+// Shared by all three file inputs (camera, photo upload, PDF upload).
+async function handleBtpFileSelected(event) {
   const file = event.target.files[0];
   event.target.value = ""; // allow re-selecting the same file next time
   if (!file) return;
@@ -329,12 +330,12 @@ async function handleBtpPhotoSelected(event) {
     return;
   }
 
-  statusEl.textContent = "Reading photo with Gemini...";
+  statusEl.textContent = "Reading with Gemini...";
 
   try {
-    const result = await extractNameFromBtpPhoto(file, apiKey);
+    const result = await extractNameFromBtpFile(file, apiKey);
     if (!result.found) {
-      statusEl.textContent = "Could not find a name on that photo - please type it in manually below.";
+      statusEl.textContent = "Could not find a name in that file - please type it in manually below.";
       return;
     }
     el("firstName").value = result.firstName || "";
@@ -346,7 +347,7 @@ async function handleBtpPhotoSelected(event) {
       .join(" ");
     statusEl.textContent = `Found "${foundName}" - check it below before adding to the batch.`;
   } catch (error) {
-    statusEl.textContent = "Could not read that photo: " + (error.message || String(error));
+    statusEl.textContent = "Could not read that file: " + (error.message || String(error));
   }
 }
 
@@ -393,8 +394,9 @@ function init() {
   el("printCertsBtn").addEventListener("click", printAllCertificates);
   el("printLabelsBtn").addEventListener("click", printAllLabels);
   el("clearBatchBtn").addEventListener("click", clearWholeBatch);
-  el("btpPhotoInput").addEventListener("change", handleBtpPhotoSelected);
-  el("btpPhotoCameraInput").addEventListener("change", handleBtpPhotoSelected);
+  el("btpPhotoInput").addEventListener("change", handleBtpFileSelected);
+  el("btpPhotoCameraInput").addEventListener("change", handleBtpFileSelected);
+  el("btpPdfInput").addEventListener("change", handleBtpFileSelected);
   el("saveApiKeyBtn").addEventListener("click", saveApiKeyFromInput);
   el("changeApiKeyBtn").addEventListener("click", changeApiKey);
   updateApiKeyUi();
