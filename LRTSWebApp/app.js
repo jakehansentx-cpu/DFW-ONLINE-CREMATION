@@ -394,6 +394,7 @@ function init() {
   el("printLabelsBtn").addEventListener("click", printAllLabels);
   el("clearBatchBtn").addEventListener("click", clearWholeBatch);
   el("btpPhotoInput").addEventListener("change", handleBtpPhotoSelected);
+  el("btpPhotoCameraInput").addEventListener("change", handleBtpPhotoSelected);
   el("saveApiKeyBtn").addEventListener("click", saveApiKeyFromInput);
   el("changeApiKeyBtn").addEventListener("click", changeApiKey);
   updateApiKeyUi();

@@ -40,7 +40,14 @@
         API key saved on this computer.
         <button type="button" id="changeApiKeyBtn" class="linkButton">Change it</button>
       </p>
-      <input type="file" id="btpPhotoInput" accept="image/*">
+      <div class="photoInputRow">
+        <label class="fileButton">Take a photo
+          <input type="file" id="btpPhotoCameraInput" accept="image/*" capture="environment">
+        </label>
+        <label class="fileButton">Choose an existing photo
+          <input type="file" id="btpPhotoInput" accept="image/*">
+        </label>
+      </div>
       <div id="ocrStatus" class="hint" style="display:none;"></div>
     </div>
     <div class="formGrid">
