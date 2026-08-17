@@ -330,12 +330,13 @@ function resetSheetLayout() {
   renderSheetGrid();
 }
 
-// Reads the decedent's name off a photo or PDF of a Burial-Transit Permit
-// via the Gemini API and pre-fills the name fields - never adds anything to
-// the batch by itself. The user still has to look at what got filled in
-// and press "Add to batch" themselves, same as if they'd typed it by hand;
-// this is a shortcut for typing, not a replacement for checking the result.
-// Shared by all three file inputs (camera, photo upload, PDF upload).
+// Reads the decedent's name (and, if recognized, the funeral home) off a
+// photo or PDF of a Burial-Transit Permit via the Gemini API and pre-fills
+// the form - never adds anything to the batch by itself. The user still
+// has to look at what got filled in and press "Add to batch" themselves,
+// same as if they'd typed it by hand; this is a shortcut for typing, not a
+// replacement for checking the result. Shared by all three file inputs
+// (camera, photo upload, PDF upload).
 async function handleBtpFileSelected(event) {
   const file = event.target.files[0];
   event.target.value = ""; // allow re-selecting the same file next time
@@ -367,7 +368,20 @@ async function handleBtpFileSelected(event) {
     const foundName = [result.firstName, result.middleName, result.lastName, result.suffix]
       .filter((part) => part)
       .join(" ");
-    statusEl.textContent = `Found "${foundName}" - check it below before adding to the batch.`;
+
+    // Only apply a funeral-home match that's actually one of our known
+    // profiles - never trust an id Gemini might have invented, and leave
+    // the dropdown alone (rather than guessing) when it says no confident
+    // match was found.
+    let funeralHomeNote = "";
+    if (result.funeralHomeProfileId && findProfile(result.funeralHomeProfileId)) {
+      el("profileSelect").value = result.funeralHomeProfileId;
+      el("profileSelect").dispatchEvent(new Event("change"));
+      funeralHomeNote = ` Funeral home set to "${findProfile(result.funeralHomeProfileId).funeralHome}" -`;
+    } else {
+      funeralHomeNote = " Funeral home not recognized, so it's unchanged below -";
+    }
+    statusEl.textContent = `Found "${foundName}".${funeralHomeNote} check everything below before adding to the batch.`;
   } catch (error) {
     statusEl.textContent = "Could not read that file: " + (error.message || String(error));
   }

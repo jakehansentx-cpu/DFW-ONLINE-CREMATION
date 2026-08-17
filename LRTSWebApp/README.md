@@ -46,8 +46,13 @@ The top of the form has three buttons — **Take a Photo**, **Upload Photo**,
 and **Upload PDF** — that let Google's Gemini AI read the decedent's name
 straight off a Burial-Transit Permit (printed and photographed, or the
 original PDF) and pre-fill the First/Middle/Last/Suffix fields for you to
-check. Nothing is added to the batch until you click **Add to batch**
-yourself, same as typing it in by hand.
+check. It also reads the permit's "FUNERAL HOME" field and, if it
+confidently matches one of the 20 saved profiles (using the funeral home's
+address to tell apart near-duplicate names, like the three "Charles W
+Smith" locations), selects it in the Funeral Home dropdown too — if it
+doesn't recognize the funeral home, the dropdown is simply left alone
+rather than guessing. Nothing is added to the batch until you click **Add
+to batch** yourself, same as typing it in by hand.
 
 This is the one part of the app that needs the internet and a Google API
 key:

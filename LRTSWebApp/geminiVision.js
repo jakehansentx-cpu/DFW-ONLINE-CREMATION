@@ -68,32 +68,58 @@ function blobToBase64(blob) {
   });
 }
 
-const NAME_RESPONSE_SCHEMA = {
-  type: "OBJECT",
-  properties: {
-    found: {
-      type: "BOOLEAN",
-      description: "true if a decedent name was legible on the permit, false otherwise.",
+// Sentinel returned (instead of a real profile id) when Gemini can't
+// confidently match the permit's funeral home against the known list -
+// e.g. it's a home the office doesn't have a saved profile for. The caller
+// should leave the dropdown alone in that case, not guess.
+const FUNERAL_HOME_NO_MATCH = "NONE_OF_THE_ABOVE";
+
+// PROFILES (profiles.js) isn't defined yet when this file itself is
+// evaluated - profiles.js loads after it, both as classic <script> tags
+// sharing one global scope - but it IS defined by the time this actually
+// runs (a user has to open a file picker first), so referencing it inside
+// a function body here is safe even though referencing it at this file's
+// top level would not be.
+function buildExtractionResponseSchema() {
+  return {
+    type: "OBJECT",
+    properties: {
+      found: {
+        type: "BOOLEAN",
+        description: "true if a decedent name was legible on the permit, false otherwise.",
+      },
+      firstName: {
+        type: "STRING",
+        description: "First name, properly capitalized (e.g. 'John'). Empty string if not found.",
+      },
+      middleName: {
+        type: "STRING",
+        description: "Middle name or initial, properly capitalized. Empty string if there is none.",
+      },
+      lastName: {
+        type: "STRING",
+        description: "Last name, properly capitalized. Empty string if not found.",
+      },
+      suffix: {
+        type: "STRING",
+        description: "Suffix such as Jr, Sr, II, III if present on the permit, otherwise empty string.",
+      },
+      funeralHomeProfileId: {
+        type: "STRING",
+        description:
+          "The id of the funeral home from the candidate list below that best matches the " +
+          `"FUNERAL HOME" field on the permit (use its address/city to tell apart near-duplicate ` +
+          `names). If none is a confident match, use "${FUNERAL_HOME_NO_MATCH}".`,
+        enum: [...PROFILES.map((p) => p.id), FUNERAL_HOME_NO_MATCH],
+      },
     },
-    firstName: {
-      type: "STRING",
-      description: "First name, properly capitalized (e.g. 'John'). Empty string if not found.",
-    },
-    middleName: {
-      type: "STRING",
-      description: "Middle name or initial, properly capitalized. Empty string if there is none.",
-    },
-    lastName: {
-      type: "STRING",
-      description: "Last name, properly capitalized. Empty string if not found.",
-    },
-    suffix: {
-      type: "STRING",
-      description: "Suffix such as Jr, Sr, II, III if present on the permit, otherwise empty string.",
-    },
-  },
-  required: ["found", "firstName", "middleName", "lastName", "suffix"],
-};
+    required: ["found", "firstName", "middleName", "lastName", "suffix", "funeralHomeProfileId"],
+  };
+}
+
+function buildFuneralHomeCandidateList() {
+  return PROFILES.map((p) => `- ${p.id}: ${p.funeralHome}${p.cityState ? ` — ${p.cityState}` : ""}`).join("\n");
+}
 
 // Google's free-tier Flash models occasionally return 503 ("high demand")
 // or 429 (rate limited) for a moment under load - both are transient, so
@@ -126,14 +152,19 @@ async function extractNameFromBtpFile(file, apiKey, onRetry) {
             text:
               "This is a Texas Burial-Transit Permit (either a photo of the printed form, " +
               "or the original PDF). Find the \"Name of Deceased\" field - it may be one " +
-              "line, or split into separate First/Middle/Last columns - and report the name.",
+              "line, or split into separate First/Middle/Last columns - and report the name. " +
+              "Also find the \"FUNERAL HOME\" field (not the cemetery/crematory field, which is " +
+              "always Metro Mortuary & Crematory) and match it against this list of known " +
+              "funeral homes by id, using the FUNERAL HOME ADDRESS to disambiguate when the " +
+              "same name appears more than once for different cities:\n" +
+              buildFuneralHomeCandidateList(),
           },
         ],
       },
     ],
     generationConfig: {
       responseMimeType: "application/json",
-      responseSchema: NAME_RESPONSE_SCHEMA,
+      responseSchema: buildExtractionResponseSchema(),
     },
   });
 
